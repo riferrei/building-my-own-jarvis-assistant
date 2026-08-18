@@ -1,0 +1,45 @@
+target/
+
+### IntelliJ IDEA ###
+.idea
+
+### Eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### Mac OS ###
+.DS_Store
+
+### Terraform
+infrastructure/.terraform
+infrastructure/.terraform.lock.hcl
+infrastructure/terraform.tfstate
+infrastructure/terraform.tfstate.backup
+infrastructure/*.pem
+infrastructure/terraform.tfvars
+infrastructure/terraform.tfvars.backup
+infrastructure/.terraform.tfstate.lock.info
+
+### Skill
+.ask
+skill-package/skill.json.backup
+
+out/

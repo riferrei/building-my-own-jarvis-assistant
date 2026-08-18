@@ -1,0 +1,126 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "my jarvis",
+      "intents": [
+        {
+          "name": "AMAZON.YesIntent",
+          "samples": [
+            "yes please",
+            "that would be great",
+            "absolutely",
+            "go ahead",
+            "please do"
+          ]
+        },
+        {
+          "name": "AMAZON.NoIntent",
+          "samples": [
+            "no thanks",
+            "not needed"
+          ]
+        },
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.FallbackIntent",
+          "samples": []
+        },
+        {
+          "name": "UserIntroIntent",
+          "slots": [
+            {
+              "name": "userName",
+              "type": "AMAZON.FirstName"
+            }
+          ],
+          "samples": [
+            "to call me {userName}",
+            "call me {userName}",
+            "that my name is {userName}",
+            "my name is {userName}",
+            "the name is {userName}",
+            "name is {userName}",
+            "{userName} is my name",
+            "{userName} is the name",
+            "I am {userName}",
+            "I'm {userName}",
+            "this is {userName}",
+            "it's {userName}",
+            "it is {userName}",
+            "{userName}"
+          ]
+        },
+        {
+          "name": "RememberIntent",
+          "slots": [
+            {
+              "name": "memory",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "to remember {memory}",
+            "remember {memory}",
+            "to remind {memory}",
+            "remind {memory}"
+          ]
+        },
+        {
+          "name": "ConversationIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "to confirm {query}",
+            "confirm {query}",
+            "to discuss {query}",
+            "discuss {query}",
+            "to suggest {query}",
+            "suggest {query}",
+            "to recommend {query}",
+            "recommend {query}",
+            "to verify {query}",
+            "verify {query}",
+            "to answer {query}",
+            "answer {query}",
+            "to recall {query}",
+            "recall {query}",
+            "to explain {query}",
+            "explain {query}",
+            "to describe {query}",
+            "describe {query}"
+          ]
+        },
+        {
+          "name": "AMAZON.NavigateHomeIntent",
+          "samples": []
+        },
+        {
+          "name": "AgentMemoryIntent",
+          "slots": [],
+          "samples": [
+            "to check the agent memory",
+            "check the agent memory",
+            "to check agent memory",
+            "check agent memory"
+          ]
+        }
+      ],
+      "types": []
+    }
+  }
+}
