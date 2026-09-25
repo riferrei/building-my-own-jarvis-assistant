@@ -97,6 +97,17 @@ variable "embedding_model_name" {
   default     = "text-embedding-3-small"
 }
 
+variable "dynamodb_user_memory_table_name" {
+  description = "DynamoDB vector table that stores every user's long-term memories (shared, isolated by ownerId)"
+  type        = string
+}
+
+variable "dynamodb_user_memory_index_name" {
+  description = "Vector index name within the user-memory DynamoDB table"
+  type        = string
+  default     = "user-memories"
+}
+
 variable "create_knowledge_base_bucket" {
   description = "Whether to create a new knowledge base bucket or use an existing one"
   type        = bool

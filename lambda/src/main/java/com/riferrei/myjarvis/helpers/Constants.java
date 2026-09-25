@@ -17,6 +17,11 @@ public enum Constants {
     public static final String AMAZON_CANCEL_INTENT = "AMAZON.CancelIntent";
     public static final String AMAZON_FALLBACK_INTENT = "AMAZON.FallbackIntent";
 
+    // Metadata attribute that isolates a user's long-term memories in the
+    // shared DynamoDB vector table. Written on every memory and required on
+    // every retrieval filter — see OwnerId for how the value is derived.
+    public static final String OWNER_ID_METADATA_KEY = "ownerId";
+
     public static final String USER_ID_PARAM = "userId";
     public static final String USER_NAME_PARAM = "userName";
     public static final String MEMORY_PARAM = "memory";
@@ -38,6 +43,13 @@ public enum Constants {
 
     public static final String S3_VECTORS_BUCKET_NAME = System.getenv("S3_VECTORS_BUCKET_NAME");
     public static final String S3_VECTORS_INDEX_NAME = System.getenv("S3_VECTORS_INDEX_NAME");
+
+    public static final String DYNAMODB_USER_MEMORY_TABLE_NAME = System.getenv("DYNAMODB_USER_MEMORY_TABLE_NAME");
+    public static final String DYNAMODB_USER_MEMORY_INDEX_NAME =
+            (System.getenv("DYNAMODB_USER_MEMORY_INDEX_NAME") == null ||
+                    System.getenv("DYNAMODB_USER_MEMORY_INDEX_NAME").isEmpty())
+                    ? "user-memories" : System.getenv("DYNAMODB_USER_MEMORY_INDEX_NAME");
+
     public static final String EMBEDDING_MODEL_NAME =
             (System.getenv("EMBEDDING_MODEL_NAME") == null ||
                     System.getenv("EMBEDDING_MODEL_NAME").isEmpty())

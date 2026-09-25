@@ -144,6 +144,25 @@ resource "aws_iam_role_policy" "my_jarvis_alexa_skill_handler_role_policy" {
           aws_s3vectors_vector_bucket.my_jarvis_alexa_skill_handler_knowledge_base_vectors.vector_bucket_arn,
           aws_s3vectors_index.my_jarvis_alexa_skill_handler_knowledge_base_index.index_arn
         ]
+      },
+      {
+        # User-memory DynamoDB vector table. There is no Terraform resource for
+        # a DynamoDB vector table, so the Lambda creates it on first use via
+        # createTableIfNotExists(true) — hence CreateTable/DescribeTable here in
+        # addition to the data-plane actions. Scoped to the table and its
+        # indexes only.
+        Effect = "Allow"
+        Action = [
+          "dynamodb:CreateTable",
+          "dynamodb:DescribeTable",
+          "dynamodb:BatchWriteItem",
+          "dynamodb:Scan",
+          "dynamodb:SearchVectors"
+        ]
+        Resource = [
+          "arn:aws:dynamodb:*:*:table/${var.dynamodb_user_memory_table_name}",
+          "arn:aws:dynamodb:*:*:table/${var.dynamodb_user_memory_table_name}/index/*"
+        ]
       }
     ]
   })
@@ -184,6 +203,9 @@ resource "aws_lambda_function" "my_jarvis_alexa_skill_handler" {
       S3_VECTORS_BUCKET_NAME       = aws_s3vectors_vector_bucket.my_jarvis_alexa_skill_handler_knowledge_base_vectors.vector_bucket_name
       S3_VECTORS_INDEX_NAME        = aws_s3vectors_index.my_jarvis_alexa_skill_handler_knowledge_base_index.index_name
       EMBEDDING_MODEL_NAME         = var.embedding_model_name
+
+      DYNAMODB_USER_MEMORY_TABLE_NAME = var.dynamodb_user_memory_table_name
+      DYNAMODB_USER_MEMORY_INDEX_NAME = var.dynamodb_user_memory_index_name
     }
   }
 }

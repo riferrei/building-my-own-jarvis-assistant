@@ -78,6 +78,7 @@ multiple, optional, or validated parameters.
 - `processQueryWithContext` is **cache-first**: consult `LangCacheService`, and on a miss run the model then write the response back to the cache.
 - Tools are plain classes with `@Tool("description")` methods and `@P("…")` parameter docs; they delegate to an injected service and log their inputs. Register tool instances in the `List<Object>` passed to `ChatAssistantService`.
 - When retrieval and ingestion share an embedding space, they **must** use the same `EmbeddingModel` instance (injected from the composition root).
+- **Multi-tenant isolation is a retrieval invariant.** User memories share one `DynamoDbEmbeddingStore`; a user's data is isolated *only* by the `ownerId` metadata attribute (declared via `inlineFilterAttributes`) plus a **mandatory** `ownerId` equality filter on every retrieval (`EmbeddingStoreContentRetriever.filter(...)`). A retriever built without that filter would leak every user's memories. The write path (`UserMemoryTool`) and read path (`ChatAssistantService`) must derive the ownerId identically — both go through `helpers/OwnerId.sanitize(...)`, the single source of truth for the isolation key, so they can never drift.
 
 ## External integrations (services)
 
@@ -85,7 +86,7 @@ multiple, optional, or validated parameters.
 - Centralize request building (`buildJsonRequest(uri, body, method)`) and response parsing; read JSON with `objectMapper.readTree(...).path(...)` and treat missing nodes gracefully.
 - **Integrations degrade, they don't crash.** On any error, log via SLF4J and return a safe empty value (`Optional.empty()`, `List.of()`, `false`) so a downstream failure never breaks the spoken interaction. Reserve thrown exceptions for programmer errors (e.g. unsupported HTTP method) and the deliberate `UserDoesNotExistException` control-flow signal.
 - Check status codes against `org.apache.http.HttpStatus` constants; branch on the ones you expect and log unexpected ones.
-- Alexa user/person/session IDs exceed the 64-char limit of the memory backend, so hash them to 64 hex chars with SHA-256 before use (`sanitizeOwnerId` / `sanitizeSessionId`). Sanitize identifiers at the integration boundary, not in handlers.
+- Alexa user/person/session IDs exceed the 64-char limit of the memory backend, so hash them to 64 hex chars with SHA-256 before use. Sanitize identifiers at the integration boundary, not in handlers. The user-memory ownerId uses the shared `helpers/OwnerId.sanitize(...)` (single source of truth, because read and write must match exactly); the RAM REST paths still use their own class-local `sanitizeOwnerId` / `sanitizeSessionId` copies.
 
 ## Custom LangChain4J extensions
 
@@ -118,6 +119,7 @@ Keep code and infrastructure in lockstep: **any code change that reads new confi
 - One file drives the skill: `infrastructure/my-jarvis-alexa-skill.tf`; inputs in `variables.tf`; example values in `terraform.tfvars.example` (never commit real `terraform.tfvars`).
 - The build is wired into Terraform: a `null_resource` runs `mvn clean package`, the JAR is uploaded to S3, and the Lambda's `handler` points at `com.riferrei.myjarvis.MyJarvisStreamHandler::handleRequest`. If you rename the entry point or change the artifact coordinates in `lambda/pom.xml`, update the `.tf` references too.
 - IAM is least-privilege and resource-scoped (e.g. S3 and S3 Vectors actions scoped to specific bucket/index ARNs). Add only the actions a change actually needs, scoped to the new resource's ARN.
+- Prefer provisioning storage in Terraform (as with the S3 Vectors bucket/index). The **exception** is the user-memory DynamoDB vector table: the AWS provider has no resource for a DynamoDB *vector* table/index, so the Lambda self-creates it via `createTableIfNotExists(true)`. That table is not in Terraform state; its IAM (in the `.tf`) therefore also grants `dynamodb:CreateTable`/`DescribeTable`, still scoped to the table ARN. Revisit this if the provider adds native support.
 - Mark secret variables `sensitive = true`. Give resources `default`s only when a sensible one exists.
 - Validate infra changes with `terraform fmt` + `terraform validate` (init with `-backend=false` is enough to validate without cloud credentials).
 

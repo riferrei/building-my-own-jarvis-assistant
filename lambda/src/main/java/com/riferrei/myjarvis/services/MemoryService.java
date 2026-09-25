@@ -28,7 +28,6 @@ public class MemoryService {
             .build();
 
     private static final String USERS_NAMESPACE = "users";
-    private static final String LONG_TERM_MEMORY_NAMESPACE = "long-term-memory";
     private static final String MEMORY_TYPE_SEMANTIC = "semantic";
 
     private final String apiUrl;
@@ -190,59 +189,6 @@ public class MemoryService {
     }
 
     // ---------------------------------------------------------------------------
-    // Long-term memory operations
-    // ---------------------------------------------------------------------------
-
-    public List<String> searchUserMemories(String userId, String memory) {
-        var searchRequest = Map.of(
-                "text", memory,
-                "limit", Integer.parseInt(USER_MEMORIES_SEARCH_LIMIT),
-                "filter", Map.of(
-                        "ownerId", Map.of("eq", sanitizeOwnerId(userId)),
-                        "namespace", Map.of("eq", LONG_TERM_MEMORY_NAMESPACE)
-                )
-        );
-
-        return extractTexts(executeSearch(searchRequest));
-    }
-
-    public boolean createUserMemory(String sessionId, String userId,
-                                    String timezone, String memory) {
-        var memoryData = Map.of(
-                "memories", List.of(Map.of(
-                        "id", UUID.randomUUID().toString(),
-                        "sessionId", sanitizeOwnerId(sessionId),
-                        "ownerId", sanitizeOwnerId(userId),
-                        "namespace", LONG_TERM_MEMORY_NAMESPACE,
-                        "text", memory,
-                        "memoryType", MEMORY_TYPE_SEMANTIC
-                ))
-        );
-
-        try {
-            var request = buildJsonRequest(
-                    URI.create(storeUrl("/long-term-memory")),
-                    memoryData,
-                    "POST"
-            );
-
-            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
-            if (response.statusCode() == HttpStatus.SC_OK || response.statusCode() == HttpStatus.SC_CREATED) {
-                var created = objectMapper.readTree(response.body()).path("created");
-                return created.isArray() && !created.isEmpty();
-            }
-
-            logger.error("Failed to create user memory — status: {}, body: {}",
-                    response.statusCode(), response.body());
-        } catch (Exception ex) {
-            logger.error("Error saving long-term memory", ex);
-        }
-
-        return false;
-    }
-
-    // ---------------------------------------------------------------------------
     // Session memory operations
     // ---------------------------------------------------------------------------
 
@@ -367,41 +313,6 @@ public class MemoryService {
         } catch (Exception e) {
             throw new RuntimeException("Failed to build request", e);
         }
-    }
-
-    private List<JsonNode> executeSearch(Map<String, Object> searchRequest) {
-        try {
-            var request = buildJsonRequest(
-                    URI.create(storeUrl("/long-term-memory/search")),
-                    searchRequest,
-                    "POST"
-            );
-
-            logger.debug("Executing search request: {}", request);
-            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            logger.debug("Search response status: {}", response.statusCode());
-
-            if (response.statusCode() == HttpStatus.SC_OK) {
-                var memories = objectMapper.readTree(response.body()).path("items");
-                if (!memories.isEmpty()) {
-                    var result = new ArrayList<JsonNode>();
-                    memories.forEach(result::add);
-                    logger.debug("Number of memories returned: {}", memories.size());
-                    return result;
-                }
-            }
-        } catch (Exception ex) {
-            logger.error("Error during memory search", ex);
-        }
-
-        return List.of();
-    }
-
-    private List<String> extractTexts(List<JsonNode> nodes) {
-        return nodes.stream()
-                .map(node -> node.path("text").asText())
-                .filter(text -> !text.isEmpty())
-                .toList();
     }
 
     // ---------------------------------------------------------------------------

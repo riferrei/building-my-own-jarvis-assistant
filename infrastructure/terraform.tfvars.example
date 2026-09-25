@@ -18,4 +18,7 @@ s3_vectors_bucket_name = "ams-with-alexa-demo-knowledge-base-vectors"
 s3_vectors_index_name  = "knowledge-base"
 embedding_model_name   = "text-embedding-3-small"
 
+dynamodb_user_memory_table_name = "ams-with-alexa-demo-user-memories"
+dynamodb_user_memory_index_name = "user-memories"
+
 alexa_skill_id = "your-alexa-skill-id"

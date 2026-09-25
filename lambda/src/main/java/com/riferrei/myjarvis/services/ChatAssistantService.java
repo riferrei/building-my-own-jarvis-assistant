@@ -8,7 +8,6 @@ import dev.langchain4j.model.input.PromptTemplate;
 import dev.langchain4j.model.scoring.ScoringModel;
 import dev.langchain4j.rag.DefaultRetrievalAugmentor;
 import dev.langchain4j.rag.RetrievalAugmentor;
-import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.content.aggregator.ContentAggregator;
 import dev.langchain4j.rag.content.aggregator.ReRankingContentAggregator;
 import dev.langchain4j.rag.content.injector.ContentInjector;
@@ -20,9 +19,11 @@ import dev.langchain4j.rag.query.transformer.CompressingQueryTransformer;
 import dev.langchain4j.rag.query.transformer.QueryTransformer;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.store.embedding.EmbeddingStore;
+import dev.langchain4j.store.embedding.filter.MetadataFilterBuilder;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import com.riferrei.myjarvis.extensions.WorkingMemoryChat;
 import com.riferrei.myjarvis.extensions.WorkingMemoryStore;
+import com.riferrei.myjarvis.helpers.OwnerId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,21 +42,24 @@ public class ChatAssistantService {
     private final MemoryService memoryService;
     private final LangCacheService langCacheService;
     private final EmbeddingModel embeddingModel;
-    private final EmbeddingStore<TextSegment> embeddingStore;
+    private final EmbeddingStore<TextSegment> knowledgeBaseStore;
+    private final EmbeddingStore<TextSegment> userMemoryStore;
 
     public ChatAssistantService(ChatModel chatModel,
                                 ScoringModel scoringModel,
                                 MemoryService memoryService,
                                 LangCacheService langCacheService,
                                 EmbeddingModel embeddingModel,
-                                EmbeddingStore<TextSegment> embeddingStore,
+                                EmbeddingStore<TextSegment> knowledgeBaseStore,
+                                EmbeddingStore<TextSegment> userMemoryStore,
                                 List<Object> tools) {
         this.chatModel = chatModel;
         this.scoringModel = scoringModel;
         this.memoryService = memoryService;
         this.langCacheService = langCacheService;
         this.embeddingModel = embeddingModel;
-        this.embeddingStore = embeddingStore;
+        this.knowledgeBaseStore = knowledgeBaseStore;
+        this.userMemoryStore = userMemoryStore;
         this.tools = tools;
     }
 
@@ -150,19 +154,18 @@ public class ChatAssistantService {
     }
 
     private ContentRetriever getLongTermMemories(String userId) {
-        return query -> memoryService.searchUserMemories(userId, query.text())
-                .stream()
-                .map(Content::from)
-                .toList();
+        return EmbeddingStoreContentRetriever.builder()
+                .embeddingStore(userMemoryStore)
+                .embeddingModel(embeddingModel)
+                .maxResults(Integer.parseInt(USER_MEMORIES_SEARCH_LIMIT))
+                .filter(MetadataFilterBuilder.metadataKey(OWNER_ID_METADATA_KEY)
+                        .isEqualTo(OwnerId.sanitize(userId)))
+                .build();
     }
 
     private ContentRetriever getGeneralKnowledgeBase() {
-        // Semantic retrieval over the S3 Vectors-backed knowledge base. The
-        // embedding model here MUST match the one used at ingestion time.
-        // The ReRankingContentAggregator applies the final minScore (0.8),
-        // so we retrieve a slightly wider candidate set and let it filter.
         return EmbeddingStoreContentRetriever.builder()
-                .embeddingStore(embeddingStore)
+                .embeddingStore(knowledgeBaseStore)
                 .embeddingModel(embeddingModel)
                 .maxResults(Integer.parseInt(KNOWLEDGE_BASE_SEARCH_LIMIT))
                 .build();

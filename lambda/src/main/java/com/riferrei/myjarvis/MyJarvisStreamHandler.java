@@ -7,6 +7,7 @@ import dev.langchain4j.data.document.DocumentParser;
 import dev.langchain4j.data.document.DocumentSplitter;
 import dev.langchain4j.data.document.parser.apache.pdfbox.ApachePdfBoxDocumentParser;
 import dev.langchain4j.data.document.splitter.DocumentByParagraphSplitter;
+import dev.langchain4j.community.store.embedding.dynamodb.DynamoDbEmbeddingStore;
 import dev.langchain4j.community.store.embedding.s3.S3VectorsEmbeddingStore;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.chat.ChatModel;
@@ -16,6 +17,7 @@ import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiEmbeddingModel;
 import dev.langchain4j.model.scoring.ScoringModel;
 import dev.langchain4j.store.embedding.EmbeddingStore;
+import software.amazon.awssdk.services.dynamodb.model.VectorDistanceFunction;
 import software.amazon.awssdk.services.s3vectors.model.DistanceMetric;
 import com.riferrei.myjarvis.handlers.*;
 import com.riferrei.myjarvis.helpers.UserDoesNotExistExceptionHandler;
@@ -55,12 +57,21 @@ public class MyJarvisStreamHandler extends SkillStreamHandler {
             .modelName(EMBEDDING_MODEL_NAME)
             .build();
 
-    private static final EmbeddingStore<TextSegment> embeddingStore = S3VectorsEmbeddingStore.builder()
+    private static final EmbeddingStore<TextSegment> knowledgeBaseStore = S3VectorsEmbeddingStore.builder()
             .region(System.getenv("AWS_REGION"))
             .vectorBucketName(S3_VECTORS_BUCKET_NAME)
             .indexName(S3_VECTORS_INDEX_NAME)
             .distanceMetric(DistanceMetric.COSINE)
             .createIndexIfNotExists(false)
+            .build();
+
+    private static final EmbeddingStore<TextSegment> userMemoryStore = DynamoDbEmbeddingStore.builder()
+            .region(System.getenv("AWS_REGION"))
+            .tableName(DYNAMODB_USER_MEMORY_TABLE_NAME)
+            .indexName(DYNAMODB_USER_MEMORY_INDEX_NAME)
+            .distanceFunction(VectorDistanceFunction.COSINE)
+            .inlineFilterAttributes(List.of(OWNER_ID_METADATA_KEY))
+            .createTableIfNotExists(true)
             .build();
 
     // Service components
@@ -82,11 +93,11 @@ public class MyJarvisStreamHandler extends SkillStreamHandler {
     private static final ChatAssistantService chatAssistantService =
             new ChatAssistantService(
                     chatModel, scoringModel, memoryService, langCacheService,
-                    embeddingModel, embeddingStore,
+                    embeddingModel, knowledgeBaseStore, userMemoryStore,
                     List.of(
                             new DateTimeTool(),
                             new AgentMemoryServerTool(memoryService),
-                            new UserMemoryTool(memoryService))
+                            new UserMemoryTool(embeddingModel, userMemoryStore))
             );
 
     public MyJarvisStreamHandler() {
@@ -108,7 +119,7 @@ public class MyJarvisStreamHandler extends SkillStreamHandler {
                         new RememberIntentHandler(chatAssistantService),
                         new ConversationIntentHandler(chatAssistantService),
                         new AgentMemoryServerIntentHandler(chatAssistantService),
-                        new KnowledgeBaseIntentHandler(documentParser, documentSplitter, embeddingModel, embeddingStore)
+                        new KnowledgeBaseIntentHandler(documentParser, documentSplitter, embeddingModel, knowledgeBaseStore)
                 )
                 .build();
     }
