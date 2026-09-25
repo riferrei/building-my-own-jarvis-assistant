@@ -41,7 +41,6 @@ public class ChatAssistantService {
     private final ChatModel chatModel;
     private final ScoringModel scoringModel;
     private final DynamoDbClient dynamoDbClient;
-    private final LangCacheService langCacheService;
     private final EmbeddingModel embeddingModel;
     private final EmbeddingStore<TextSegment> knowledgeBaseStore;
     private final EmbeddingStore<TextSegment> userMemoryStore;
@@ -49,7 +48,6 @@ public class ChatAssistantService {
     public ChatAssistantService(ChatModel chatModel,
                                 ScoringModel scoringModel,
                                 DynamoDbClient dynamoDbClient,
-                                LangCacheService langCacheService,
                                 EmbeddingModel embeddingModel,
                                 EmbeddingStore<TextSegment> knowledgeBaseStore,
                                 EmbeddingStore<TextSegment> userMemoryStore,
@@ -57,7 +55,6 @@ public class ChatAssistantService {
         this.chatModel = chatModel;
         this.scoringModel = scoringModel;
         this.dynamoDbClient = dynamoDbClient;
-        this.langCacheService = langCacheService;
         this.embeddingModel = embeddingModel;
         this.knowledgeBaseStore = knowledgeBaseStore;
         this.userMemoryStore = userMemoryStore;
@@ -82,22 +79,17 @@ public class ChatAssistantService {
                                           String query) {
         logger.debug("Processing query with context for user: {}", userId);
 
-        return langCacheService.searchForResponse(userId, query)
-                .orElseGet(() -> {
-                    RetrievalAugmentor augmentor = createRetrievalAugmentor(userId);
+        RetrievalAugmentor augmentor = createRetrievalAugmentor(userId);
 
-                    ContextualChatAssistant contextualChatAssistant =
-                            AiServices.builder(ContextualChatAssistant.class)
-                                .chatModel(chatModel)
-                                .chatMemory(getChatMemory(userId))
-                                .retrievalAugmentor(augmentor)
-                                .tools(tools)
-                                .build();
+        ContextualChatAssistant contextualChatAssistant =
+                AiServices.builder(ContextualChatAssistant.class)
+                        .chatModel(chatModel)
+                        .chatMemory(getChatMemory(userId))
+                        .retrievalAugmentor(augmentor)
+                        .tools(tools)
+                        .build();
 
-                    String response = contextualChatAssistant.chat(systemPrompt, userId, userName, query);
-                    langCacheService.addNewResponse(userId, query, response);
-                    return response;
-                });
+        return contextualChatAssistant.chat(systemPrompt, userId, userName, query);
     }
 
     private RetrievalAugmentor createRetrievalAugmentor(String userId) {

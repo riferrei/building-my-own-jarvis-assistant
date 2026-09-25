@@ -4,10 +4,6 @@ openai_api_key    = "your-openai-api-key"
 openai_model_name = "gpt-4o"
 cohere_api_key = "your-cohere-api-key"
 
-langcache_api_base_url = "langcache-api-base-url"
-langcache_api_key = "your-langcache-api-key"
-langcache_cache_id = "langcache-cache-id"
-
 knowledge_base_bucket_name = "ams-with-alexa-demo-knowledge-base"
 
 s3_vectors_bucket_name = "ams-with-alexa-demo-knowledge-base-vectors"

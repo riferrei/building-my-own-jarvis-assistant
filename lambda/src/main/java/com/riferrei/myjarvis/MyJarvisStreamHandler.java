@@ -76,12 +76,6 @@ public class MyJarvisStreamHandler extends SkillStreamHandler {
             .build();
 
     // Service components
-    private static final LangCacheService langCacheService = LangCacheService.builder()
-            .baseUrl(REDIS_LANGCACHE_API_BASE_URL)
-            .apiKey(REDIS_LANGCACHE_API_KEY)
-            .cacheId(REDIS_LANGCACHE_CACHE_ID)
-            .build();
-
     private static final ReminderService reminderService = new ReminderService();
 
     private static final DynamoDbClient dynamoDbClient = DynamoDbClient.builder()
@@ -95,7 +89,7 @@ public class MyJarvisStreamHandler extends SkillStreamHandler {
 
     private static final ChatAssistantService chatAssistantService =
             new ChatAssistantService(
-                    chatModel, scoringModel, dynamoDbClient, langCacheService,
+                    chatModel, scoringModel, dynamoDbClient,
                     embeddingModel, knowledgeBaseStore, userMemoryStore,
                     List.of(
                             new DateTimeTool(),

@@ -1,7 +1,7 @@
 # Building my own J.A.R.V.I.S assistant
 
 ## Overview
-This project demonstrates how to create a [J.A.R.V.I.S](https://en.wikipedia.org/wiki/J.A.R.V.I.S.) assistant deployed as an Alexa skill. Built using Java, LangChain4J, AWS Lambda, and Redis Cloud, it enables Alexa to recall past conversations and deliver contextual, intelligent responses. It showcases how to implement a memory and semantic-caching layer for AI assistants, enriching the natural language experience through state persistence and fast retrieval.
+This project demonstrates how to create a [J.A.R.V.I.S](https://en.wikipedia.org/wiki/J.A.R.V.I.S.) assistant deployed as an Alexa skill. Built using Java, LangChain4J, AWS Lambda, and Amazon DynamoDB, it enables Alexa to recall past conversations and deliver contextual, intelligent responses. It showcases how to implement a memory layer for AI assistants, enriching the natural language experience through state persistence and fast retrieval.
 
 ## Table of Contents
 - [Demo Objectives](#demo-objectives)
@@ -17,7 +17,6 @@ This project demonstrates how to create a [J.A.R.V.I.S](https://en.wikipedia.org
 ## Demo Objectives
 - Demonstrate how to implement context engineering patterns with LangChain4J.
 - Demonstrate DynamoDB (plain and vector tables) as the persistence layer for user records, short-term session memory, and long-term user memories.
-- Demonstrate Redis LangCache as a semantic cache layer for human interactions.
 - Automate Alexa skill deployment using Terraform, AWS Lambda, and the ASK CLI.
 
 ## Setup
@@ -38,7 +37,6 @@ This project demonstrates how to create a [J.A.R.V.I.S](https://en.wikipedia.org
 | [Amazon developer account](https://developer.amazon.com) | This is needed to register, deploy, and test Alexa skills.                   |
 | [OpenAI](https://auth.openai.com/create-account)         | LLM that will power the intelligent responses for the skill.                 |
 | [Cohere](https://cohere.com)                             | Scoring model used to deduplicate memories from the context.                 |
-| [Redis Cloud](https://redis.io/try-free)                 | Required for Redis LangCache (managed semantic cache).                        |
 
 ### Configuration
 
@@ -56,14 +54,6 @@ This project demonstrates how to create a [J.A.R.V.I.S](https://en.wikipedia.org
    ask configure
    ```
 
-#### Redis Cloud
-1. [Enable your APIs from Redis Cloud](https://redis.io/docs/latest/operate/rc/api/get-started/enable-the-api/).
-2. Export them as environment variables:
-   ```sh
-   export REDISCLOUD_ACCESS_KEY=<YOUR_API_ACCOUNT_KEY>
-   export REDISCLOUD_SECRET_KEY=<YOUR_API_USER_KEY>
-   ```
-
 #### Terraform Configuration
 1. Create your variables file:
    ```sh
@@ -77,9 +67,6 @@ This project demonstrates how to create a [J.A.R.V.I.S](https://en.wikipedia.org
 | `openai_api_key`               | API key used by the Alexa skill to call the OpenAI LLM.                                |
 | `openai_model_name`            | Name of the OpenAI model used to generate responses (e.g., `gpt-4o`).                 |
 | `cohere_api_key`               | API key used by the Alexa skill to deduplicate memories via Cohere's scoring model.    |
-| `langcache_api_base_url`       | Base URL for the Redis LangCache service.                                              |
-| `langcache_api_key`            | API key for the Redis LangCache service.                                               |
-| `langcache_cache_id`           | Cache ID for the Redis LangCache service.                                              |
 | `knowledge_base_bucket_name`   | Name of the S3 bucket used to upload knowledge base documents.                         |
 | `dynamodb_users_table_name`    | DynamoDB table mapping each Alexa user to a spoken name (plain, non-vector).           |
 | `dynamodb_session_memory_table_name` | DynamoDB table holding the short-term chat transcript per session (plain, TTL-expired). |
@@ -89,10 +76,6 @@ This project demonstrates how to create a [J.A.R.V.I.S](https://en.wikipedia.org
 
 #### DynamoDB Setup
 No manual steps are required. Terraform provisions the plain **users** and **session-memory** tables, and the Lambda self-creates the long-term user-memory **vector** table on first use (the AWS provider has no resource for a DynamoDB vector table). Set the table names via the `dynamodb_*_table_name` variables in your `terraform.tfvars`.
-
-#### Redis LangCache Setup
-
-![Creating the LangCache Service](images/create-langcache.png)
 
 #### Installation & Deployment
 Once configured, deploy everything using:
@@ -126,7 +109,7 @@ Covers demo goals, motivations for a memory layer, and architecture overview.
 
 ## Architecture
 ![Software Architecture](./images/software-architecture.png)
-This architecture uses an Alexa skill written in Java and hosted as an AWS Lambda function. The Lambda implements a stream handler that processes user requests and responses, using DynamoDB (plain tables for user records and short-term session memory, plus a vector table for long-term user memories) and Redis LangCache — a managed semantic cache on Redis Cloud — as its backend layer.
+This architecture uses an Alexa skill written in Java and hosted as an AWS Lambda function. The Lambda implements a stream handler that processes user requests and responses, using DynamoDB (plain tables for user records and short-term session memory, plus a vector table for long-term user memories) as its backend layer.
 
 ![Chat Assistant Service](./assets/chat-assistant-service.png)
 As part of the stream handler implementation, it uses a Chat Assistant Service that leverages LangChain4J to manage interactions with the memory stores. This service implements context engineering, ensuring that conversations are enriched with relevant historical data retrieved from DynamoDB. OpenAI is the LLM used to process and generate responses.
@@ -136,7 +119,6 @@ As part of the stream handler implementation, it uses a Chat Assistant Service t
 
 ## Resources
 - [Amazon DynamoDB](https://docs.aws.amazon.com/dynamodb/)
-- [Redis Cloud](https://redis.io/try-free)
 - [AWS Lambda Documentation](https://docs.aws.amazon.com/lambda)
 - [Amazon Alexa Skills Kit](https://developer.amazon.com/en-US/alexa/alexa-skills-kit)
 

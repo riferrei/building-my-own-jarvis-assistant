@@ -244,19 +244,16 @@ resource "aws_lambda_function" "my_jarvis_alexa_skill_handler" {
   timeout          = 60
   environment {
     variables = {
-      OPENAI_API_KEY               = var.openai_api_key
-      OPENAI_MODEL_NAME            = var.openai_model_name
-      OPENAI_CHAT_TEMPERATURE      = var.openai_chat_temperature
-      OPENAI_CHAT_MAX_TOKENS       = var.openai_chat_max_tokens
-      COHERE_API_KEY               = var.cohere_api_key
-      COHERE_MODEL_NAME            = var.cohere_model_name
-      REDIS_LANGCACHE_API_BASE_URL = var.langcache_api_base_url
-      REDIS_LANGCACHE_API_KEY      = var.langcache_api_key
-      REDIS_LANGCACHE_CACHE_ID     = var.langcache_cache_id
-      KNOWLEDGE_BASE_BUCKET_NAME   = local.knowledge_base_bucket_name
-      S3_VECTORS_BUCKET_NAME       = aws_s3vectors_vector_bucket.my_jarvis_alexa_skill_handler_knowledge_base_vectors.vector_bucket_name
-      S3_VECTORS_INDEX_NAME        = aws_s3vectors_index.my_jarvis_alexa_skill_handler_knowledge_base_index.index_name
-      EMBEDDING_MODEL_NAME         = var.embedding_model_name
+      OPENAI_API_KEY             = var.openai_api_key
+      OPENAI_MODEL_NAME          = var.openai_model_name
+      OPENAI_CHAT_TEMPERATURE    = var.openai_chat_temperature
+      OPENAI_CHAT_MAX_TOKENS     = var.openai_chat_max_tokens
+      COHERE_API_KEY             = var.cohere_api_key
+      COHERE_MODEL_NAME          = var.cohere_model_name
+      KNOWLEDGE_BASE_BUCKET_NAME = local.knowledge_base_bucket_name
+      S3_VECTORS_BUCKET_NAME     = aws_s3vectors_vector_bucket.my_jarvis_alexa_skill_handler_knowledge_base_vectors.vector_bucket_name
+      S3_VECTORS_INDEX_NAME      = aws_s3vectors_index.my_jarvis_alexa_skill_handler_knowledge_base_index.index_name
+      EMBEDDING_MODEL_NAME       = var.embedding_model_name
 
       DYNAMODB_USER_MEMORY_TABLE_NAME = var.dynamodb_user_memory_table_name
       DYNAMODB_USER_MEMORY_INDEX_NAME = var.dynamodb_user_memory_index_name
