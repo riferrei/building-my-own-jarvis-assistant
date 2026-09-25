@@ -130,7 +130,7 @@ resource "aws_lambda_function" "my_jarvis_alexa_skill_handler" {
   s3_bucket        = aws_s3_bucket.my_jarvis_alexa_skill_handler_lambda_artifacts.id
   s3_key           = aws_s3_object.my_jarvis_skill_handler_lambda_jar.key
   source_code_hash = data.local_file.my_jarvis_skill_handler_jar_file.content_base64sha256
-  handler          = "io.redis.devrel.demos.myjarvis.MyJarvisStreamHandler::handleRequest"
+  handler          = "com.riferrei.myjarvis.MyJarvisStreamHandler::handleRequest"
   role             = aws_iam_role.my_jarvis_alexa_skill_handler_role.arn
   runtime          = "java21"
   memory_size      = 512
