@@ -1,18 +1,23 @@
 package com.riferrei.myjarvis.extensions;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import dev.langchain4j.data.message.*;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
-import com.riferrei.myjarvis.services.MemoryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.DeleteRequest;
+import software.amazon.awssdk.services.dynamodb.model.WriteRequest;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 
 import static com.riferrei.myjarvis.helpers.MessageHelper.messageContent;
 
@@ -20,21 +25,31 @@ public class WorkingMemoryStore implements ChatMemoryStore {
 
     private static final Logger logger = LoggerFactory.getLogger(WorkingMemoryStore.class);
 
-    private MemoryService memoryService;
+    private static final String SESSION_ID_ATTRIBUTE = "sessionId";
+    private static final String EVENT_ID_ATTRIBUTE = "eventId";
+    private static final String ROLE_ATTRIBUTE = "role";
+    private static final String TEXT_ATTRIBUTE = "text";
+    private static final String ACTOR_ID_ATTRIBUTE = "actorId";
+    private static final String CREATED_AT_ATTRIBUTE = "createdAt";
+    private static final String EXPIRES_AT_ATTRIBUTE = "expiresAt";
+
+    private static final String EVENT_ID_FORMAT = "%019d#%s";
+
+    private static final int BATCH_WRITE_MAX = 25;
+
+    private DynamoDbClient dynamoDbClient;
+    private String tableName;
+    private int ttlMinutes;
     private boolean storeSystemMessages = false;
     private boolean storeAiMessages = false;
     private boolean storeToolMessages = false;
     private int maxContextWindow = 1000;
 
-    // Tracks how many messages were already in the store when getMessages was last called,
-    // so updateMessages can POST only the new delta rather than the full list.
     private int lastFetchedCount = 0;
 
-    /**
-     * Hashes an arbitrary session/actor ID to a 64-character hex string (SHA-256).
-     * The RAM API enforces a max length of 64 on session IDs and actor IDs, but
-     * Alexa session/person IDs are much longer than that.
-     */
+    private record SessionEvent(String role, String text) {
+    }
+
     private static String sanitizeSessionId(String sessionId) {
         try {
             var digest = MessageDigest.getInstance("SHA-256");
@@ -43,29 +58,22 @@ public class WorkingMemoryStore implements ChatMemoryStore {
             for (byte b : hash) {
                 sb.append(String.format("%02x", b));
             }
-            return sb.toString(); // exactly 64 hex chars
+            return sb.toString();
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException("SHA-256 not available", e);
         }
     }
-
-    // ---------------------------------------------------------------------------
-    // ChatMemoryStore implementation
-    // ---------------------------------------------------------------------------
 
     @Override
     public List<ChatMessage> getMessages(Object memoryId) {
         var sanitizedId = sanitizeSessionId(memoryId.toString());
         var chatMessages = new ArrayList<ChatMessage>();
 
-        for (JsonNode event : memoryService.getSessionMemoryEvents(sanitizedId)) {
-            var role = event.path("role").asText("");
-            var contentArray = event.path("content");
-            var text = contentArray.isArray() && !contentArray.isEmpty()
-                    ? contentArray.path(0).path("text").asText("")
-                    : "";
+        for (SessionEvent event : fetchSessionEvents(sanitizedId)) {
+            var role = event.role();
+            var text = event.text();
 
-            if (text.isBlank()) continue;
+            if (text == null || text.isBlank()) continue;
 
             if (!storeSystemMessages && "SYSTEM".equalsIgnoreCase(role)) continue;
             if (!storeAiMessages && "ASSISTANT".equalsIgnoreCase(role)) continue;
@@ -86,7 +94,6 @@ public class WorkingMemoryStore implements ChatMemoryStore {
             }
         }
 
-        // Apply context window limit
         var trimmed = chatMessages.size() > maxContextWindow
                 ? chatMessages.subList(chatMessages.size() - maxContextWindow, chatMessages.size())
                 : chatMessages;
@@ -99,7 +106,6 @@ public class WorkingMemoryStore implements ChatMemoryStore {
     public void updateMessages(Object memoryId, List<ChatMessage> list) {
         var sanitizedId = sanitizeSessionId(memoryId.toString());
 
-        // Only send messages that are new since the last getMessages call
         var newMessages = list.size() > lastFetchedCount
                 ? list.subList(lastFetchedCount, list.size())
                 : List.<ChatMessage>of();
@@ -118,11 +124,11 @@ public class WorkingMemoryStore implements ChatMemoryStore {
 
             if (role == null) continue;
 
-            String actorId = "USER".equals(role) ? sanitizeSessionId(memoryId.toString()) : "assistant";
+            String actorId = "USER".equals(role) ? sanitizedId : "assistant";
             String text = messageContent(message);
             if (text == null || text.isBlank()) continue;
 
-            memoryService.addSessionMemoryEvent(sanitizedId, actorId, role, text, System.currentTimeMillis());
+            addSessionEvent(sanitizedId, actorId, role, text, System.currentTimeMillis());
         }
 
         lastFetchedCount = list.size();
@@ -131,12 +137,116 @@ public class WorkingMemoryStore implements ChatMemoryStore {
     @Override
     public void deleteMessages(Object memoryId) {
         var sanitizedId = sanitizeSessionId(memoryId.toString());
-        memoryService.deleteSessionMemory(sanitizedId);
+        deleteSessionEvents(sanitizedId);
     }
 
-    // ---------------------------------------------------------------------------
-    // Getters / setters
-    // ---------------------------------------------------------------------------
+    private List<SessionEvent> fetchSessionEvents(String sanitizedSessionId) {
+        var nowMillis = System.currentTimeMillis();
+
+        try {
+            var response = dynamoDbClient.query(builder -> builder
+                    .tableName(tableName)
+                    .keyConditionExpression("#sid = :sid")
+                    .expressionAttributeNames(Map.of("#sid", SESSION_ID_ATTRIBUTE))
+                    .expressionAttributeValues(Map.of(":sid", AttributeValue.fromS(sanitizedSessionId)))
+                    .scanIndexForward(true)
+            );
+
+            var events = new ArrayList<SessionEvent>();
+            for (var item : response.items()) {
+                var expiresAt = parseLong(item.get(EXPIRES_AT_ATTRIBUTE));
+                if (expiresAt > 0 && expiresAt * 1000L <= nowMillis) {
+                    continue;
+                }
+                events.add(new SessionEvent(attr(item.get(ROLE_ATTRIBUTE)), attr(item.get(TEXT_ATTRIBUTE))));
+            }
+            return events;
+        } catch (Exception ex) {
+            logger.error("Error fetching session memory for: {}", sanitizedSessionId, ex);
+            return List.of();
+        }
+    }
+
+    private void addSessionEvent(String sanitizedSessionId,
+                                 String actorId,
+                                 String role,
+                                 String text,
+                                 long createdAt) {
+        var expiresAt = createdAt / 1000L + (long) ttlMinutes * 60L;
+        var eventId = String.format(EVENT_ID_FORMAT, createdAt, UUID.randomUUID());
+
+        try {
+            dynamoDbClient.putItem(builder -> builder
+                    .tableName(tableName)
+                    .item(Map.of(
+                            SESSION_ID_ATTRIBUTE, AttributeValue.fromS(sanitizedSessionId),
+                            EVENT_ID_ATTRIBUTE, AttributeValue.fromS(eventId),
+                            ROLE_ATTRIBUTE, AttributeValue.fromS(role),
+                            TEXT_ATTRIBUTE, AttributeValue.fromS(text),
+                            ACTOR_ID_ATTRIBUTE, AttributeValue.fromS(actorId),
+                            CREATED_AT_ATTRIBUTE, AttributeValue.fromN(Long.toString(createdAt)),
+                            EXPIRES_AT_ATTRIBUTE, AttributeValue.fromN(Long.toString(expiresAt))
+                    ))
+            );
+            logger.debug("Session event added for: {}", sanitizedSessionId);
+        } catch (Exception ex) {
+            logger.error("Error adding session event for: {}", sanitizedSessionId, ex);
+        }
+    }
+
+    private void deleteSessionEvents(String sanitizedSessionId) {
+        try {
+            var response = dynamoDbClient.query(builder -> builder
+                    .tableName(tableName)
+                    .keyConditionExpression("#sid = :sid")
+                    .projectionExpression("#sid, #eid")
+                    .expressionAttributeNames(Map.of("#sid", SESSION_ID_ATTRIBUTE, "#eid", EVENT_ID_ATTRIBUTE))
+                    .expressionAttributeValues(Map.of(":sid", AttributeValue.fromS(sanitizedSessionId)))
+            );
+
+            if (response.items().isEmpty()) {
+                logger.warn("Session memory not found for: {}", sanitizedSessionId);
+                return;
+            }
+
+            var deleteRequests = new ArrayList<WriteRequest>();
+            for (var item : response.items()) {
+                deleteRequests.add(WriteRequest.builder()
+                        .deleteRequest(DeleteRequest.builder()
+                                .key(Map.of(
+                                        SESSION_ID_ATTRIBUTE, item.get(SESSION_ID_ATTRIBUTE),
+                                        EVENT_ID_ATTRIBUTE, item.get(EVENT_ID_ATTRIBUTE)
+                                ))
+                                .build())
+                        .build());
+            }
+
+            for (int i = 0; i < deleteRequests.size(); i += BATCH_WRITE_MAX) {
+                var batch = deleteRequests.subList(i, Math.min(i + BATCH_WRITE_MAX, deleteRequests.size()));
+                dynamoDbClient.batchWriteItem(builder -> builder
+                        .requestItems(Map.of(tableName, batch)));
+            }
+
+            logger.info("Successfully deleted session memory for: {}", sanitizedSessionId);
+        } catch (Exception ex) {
+            logger.error("Error deleting session memory for: {}", sanitizedSessionId, ex);
+        }
+    }
+
+    private static String attr(AttributeValue value) {
+        return value == null || value.s() == null ? "" : value.s();
+    }
+
+    private static long parseLong(AttributeValue value) {
+        if (value == null || value.n() == null) {
+            return 0L;
+        }
+        try {
+            return Long.parseLong(value.n());
+        } catch (NumberFormatException ex) {
+            return 0L;
+        }
+    }
 
     public boolean isStoreSystemMessages() { return storeSystemMessages; }
     public void setStoreSystemMessages(boolean v) { this.storeSystemMessages = v; }
@@ -150,23 +260,31 @@ public class WorkingMemoryStore implements ChatMemoryStore {
     public int getMaxContextWindow() { return maxContextWindow; }
     public void setMaxContextWindow(int v) { this.maxContextWindow = v; }
 
-    // ---------------------------------------------------------------------------
-    // Builder
-    // ---------------------------------------------------------------------------
-
     public static Builder builder() {
         return new Builder();
     }
 
     public static class Builder {
-        private MemoryService memoryService;
+        private DynamoDbClient dynamoDbClient;
+        private String tableName;
+        private Integer ttlMinutes;
         private Optional<Boolean> storeSystemMessages = Optional.empty();
         private Optional<Boolean> storeAiMessages = Optional.empty();
         private Optional<Boolean> storeToolMessages = Optional.empty();
         private Optional<Integer> maxContextWindow = Optional.empty();
 
-        public Builder memoryService(MemoryService value) {
-            this.memoryService = value;
+        public Builder dynamoDbClient(DynamoDbClient value) {
+            this.dynamoDbClient = value;
+            return this;
+        }
+
+        public Builder tableName(String value) {
+            this.tableName = value;
+            return this;
+        }
+
+        public Builder ttlMinutes(int value) {
+            this.ttlMinutes = value;
             return this;
         }
 
@@ -191,9 +309,13 @@ public class WorkingMemoryStore implements ChatMemoryStore {
         }
 
         public WorkingMemoryStore build() {
-            java.util.Objects.requireNonNull(memoryService, "memoryService is required");
+            Objects.requireNonNull(dynamoDbClient, "dynamoDbClient is required");
+            Objects.requireNonNull(tableName, "tableName is required");
+            Objects.requireNonNull(ttlMinutes, "ttlMinutes is required");
             var store = new WorkingMemoryStore();
-            store.memoryService = this.memoryService;
+            store.dynamoDbClient = this.dynamoDbClient;
+            store.tableName = this.tableName;
+            store.ttlMinutes = this.ttlMinutes;
             storeSystemMessages.ifPresent(store::setStoreSystemMessages);
             storeAiMessages.ifPresent(store::setStoreAiMessages);
             storeToolMessages.ifPresent(store::setStoreToolMessages);

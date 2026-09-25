@@ -21,6 +21,7 @@ import dev.langchain4j.service.AiServices;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.filter.MetadataFilterBuilder;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import com.riferrei.myjarvis.extensions.WorkingMemoryChat;
 import com.riferrei.myjarvis.extensions.WorkingMemoryStore;
 import com.riferrei.myjarvis.helpers.OwnerId;
@@ -39,7 +40,7 @@ public class ChatAssistantService {
     private final List<Object> tools;
     private final ChatModel chatModel;
     private final ScoringModel scoringModel;
-    private final MemoryService memoryService;
+    private final DynamoDbClient dynamoDbClient;
     private final LangCacheService langCacheService;
     private final EmbeddingModel embeddingModel;
     private final EmbeddingStore<TextSegment> knowledgeBaseStore;
@@ -47,7 +48,7 @@ public class ChatAssistantService {
 
     public ChatAssistantService(ChatModel chatModel,
                                 ScoringModel scoringModel,
-                                MemoryService memoryService,
+                                DynamoDbClient dynamoDbClient,
                                 LangCacheService langCacheService,
                                 EmbeddingModel embeddingModel,
                                 EmbeddingStore<TextSegment> knowledgeBaseStore,
@@ -55,7 +56,7 @@ public class ChatAssistantService {
                                 List<Object> tools) {
         this.chatModel = chatModel;
         this.scoringModel = scoringModel;
-        this.memoryService = memoryService;
+        this.dynamoDbClient = dynamoDbClient;
         this.langCacheService = langCacheService;
         this.embeddingModel = embeddingModel;
         this.knowledgeBaseStore = knowledgeBaseStore;
@@ -143,7 +144,9 @@ public class ChatAssistantService {
 
     private ChatMemory getChatMemory(String userId) {
         ChatMemoryStore chatMemoryStore = WorkingMemoryStore.builder()
-                .memoryService(memoryService)
+                .dynamoDbClient(dynamoDbClient)
+                .tableName(DYNAMODB_SESSION_MEMORY_TABLE_NAME)
+                .ttlMinutes(Integer.parseInt(SESSION_MEMORY_TTL_MINUTES))
                 .maxContextWindow(Integer.parseInt(OPENAI_CHAT_MAX_TOKENS))
                 .build();
 

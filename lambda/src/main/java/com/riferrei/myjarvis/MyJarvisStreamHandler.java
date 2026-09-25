@@ -17,13 +17,14 @@ import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiEmbeddingModel;
 import dev.langchain4j.model.scoring.ScoringModel;
 import dev.langchain4j.store.embedding.EmbeddingStore;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.VectorDistanceFunction;
 import software.amazon.awssdk.services.s3vectors.model.DistanceMetric;
 import com.riferrei.myjarvis.handlers.*;
 import com.riferrei.myjarvis.helpers.UserDoesNotExistExceptionHandler;
 import com.riferrei.myjarvis.helpers.UserValidationInterceptor;
 import com.riferrei.myjarvis.services.*;
-import com.riferrei.myjarvis.tools.AgentMemoryServerTool;
 import com.riferrei.myjarvis.tools.DateTimeTool;
 import com.riferrei.myjarvis.tools.UserMemoryTool;
 
@@ -82,21 +83,22 @@ public class MyJarvisStreamHandler extends SkillStreamHandler {
             .build();
 
     private static final ReminderService reminderService = new ReminderService();
-    private static final MemoryService memoryService = MemoryService.builder()
-            .apiUrl(REDIS_AGENT_MEMORY_API_URL)
-            .apiKey(REDIS_AGENT_MEMORY_API_KEY)
-            .storeId(REDIS_AGENT_MEMORY_STORE_ID)
+
+    private static final DynamoDbClient dynamoDbClient = DynamoDbClient.builder()
+            .region(Region.of(System.getenv("AWS_REGION")))
             .build();
 
-    private static final UserService userService = new UserService(memoryService);
+    private static final UserService userService = UserService.builder()
+            .dynamoDbClient(dynamoDbClient)
+            .tableName(DYNAMODB_USERS_TABLE_NAME)
+            .build();
 
     private static final ChatAssistantService chatAssistantService =
             new ChatAssistantService(
-                    chatModel, scoringModel, memoryService, langCacheService,
+                    chatModel, scoringModel, dynamoDbClient, langCacheService,
                     embeddingModel, knowledgeBaseStore, userMemoryStore,
                     List.of(
                             new DateTimeTool(),
-                            new AgentMemoryServerTool(memoryService),
                             new UserMemoryTool(embeddingModel, userMemoryStore))
             );
 
@@ -118,7 +120,6 @@ public class MyJarvisStreamHandler extends SkillStreamHandler {
                         new UserIntroIntentHandler(userService, chatAssistantService),
                         new RememberIntentHandler(chatAssistantService),
                         new ConversationIntentHandler(chatAssistantService),
-                        new AgentMemoryServerIntentHandler(chatAssistantService),
                         new KnowledgeBaseIntentHandler(documentParser, documentSplitter, embeddingModel, knowledgeBaseStore)
                 )
                 .build();

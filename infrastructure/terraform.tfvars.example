@@ -8,10 +8,6 @@ langcache_api_base_url = "langcache-api-base-url"
 langcache_api_key = "your-langcache-api-key"
 langcache_cache_id = "langcache-cache-id"
 
-redis_agent_memory_api_url  = "https://<region>.agent-memory.redis.io"
-redis_agent_memory_api_key  = "your-agent-memory-api-key"
-redis_agent_memory_store_id = "your-agent-memory-store-id"
-
 knowledge_base_bucket_name = "ams-with-alexa-demo-knowledge-base"
 
 s3_vectors_bucket_name = "ams-with-alexa-demo-knowledge-base-vectors"
@@ -20,5 +16,9 @@ embedding_model_name   = "text-embedding-3-small"
 
 dynamodb_user_memory_table_name = "ams-with-alexa-demo-user-memories"
 dynamodb_user_memory_index_name = "user-memories"
+
+dynamodb_users_table_name          = "ams-with-alexa-demo-users"
+dynamodb_session_memory_table_name = "ams-with-alexa-demo-session-memory"
+session_memory_ttl_minutes         = 5
 
 alexa_skill_id = "your-alexa-skill-id"

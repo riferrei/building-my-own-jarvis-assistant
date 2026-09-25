@@ -21,7 +21,7 @@ Alexa → Lambda (MyJarvisStreamHandler)
   → UserValidationInterceptor (resolves/creates user, stashes user context)
   → <Intent>Handler (extracts slots, builds system prompt, delegates)
     → ChatAssistantService (RAG orchestration + semantic cache)
-      → ChatModel / EmbeddingStore / MemoryService / LangCacheService / tools
+      → ChatModel / EmbeddingStore / WorkingMemoryStore / LangCacheService / tools
   → HandlerHelper.buildAlexaResponse (uniform Alexa response)
 ```
 
@@ -42,7 +42,7 @@ that constructs model/service/store/tool beans, and it does so as
 `static final` fields (reused across warm Lambda invocations). Everything else
 receives ready-made references through its **constructor**.
 
-- **Do** build every bean (chat model, scoring model, embedding model, embedding store, `MemoryService`, `LangCacheService`, etc.) in `MyJarvisStreamHandler` and thread it into handlers/services via constructor parameters.
+- **Do** build every bean (chat model, scoring model, embedding model, embedding store, `DynamoDbClient`, `UserService`, `LangCacheService`, etc.) in `MyJarvisStreamHandler` and thread it into handlers/services via constructor parameters. The users table (`UserService`) and the session-memory store share one injected `DynamoDbClient`; the user-memory *vector* store (`DynamoDbEmbeddingStore`) manages its own client internally and is not routed through it. `WorkingMemoryStore` is a `ChatMemoryStore` SPI with no dependency on our own service classes — it talks to DynamoDB directly through the injected `DynamoDbClient` + table name + TTL passed to its builder.
 - **Do not** call `.builder()` / `new` on a dependency *inside* a service, handler, or tool. Those classes declare `private final` fields and assign them from constructor arguments only.
 - Share a single instance where two collaborators need the same thing. The knowledge-base `EmbeddingModel` and `EmbeddingStore` are built once and injected into **both** the ingestion handler and `ChatAssistantService`, because ingestion and retrieval must use the identical embedding model.
 - The only object created locally inside a class is one with no external config that genuinely belongs to that class (e.g. `KnowledgeBaseIntentHandler` creates its own `AmazonS3` client). Prefer injection; reserve local construction for truly internal, config-free helpers.
@@ -52,9 +52,9 @@ receives ready-made references through its **constructor**.
 Services/extensions that take several config values expose a static `builder()`
 returning a nested `public static class Builder` with fluent setters and a
 `build()` that validates required fields with `Objects.requireNonNull(x, "x is
-required")`. See `MemoryService.Builder` and `WorkingMemoryStore.Builder`.
+required")`. See `UserService.Builder` and `WorkingMemoryStore.Builder`.
 Constructors of such classes are `private`; instances come only through the
-builder. Simple beans that just wrap collaborators (e.g. `UserService`) use a
+builder. Simple beans that just wrap collaborators (e.g. `ReminderService`) use a
 plain public constructor instead — reach for a builder only when there are
 multiple, optional, or validated parameters.
 
@@ -86,7 +86,7 @@ multiple, optional, or validated parameters.
 - Centralize request building (`buildJsonRequest(uri, body, method)`) and response parsing; read JSON with `objectMapper.readTree(...).path(...)` and treat missing nodes gracefully.
 - **Integrations degrade, they don't crash.** On any error, log via SLF4J and return a safe empty value (`Optional.empty()`, `List.of()`, `false`) so a downstream failure never breaks the spoken interaction. Reserve thrown exceptions for programmer errors (e.g. unsupported HTTP method) and the deliberate `UserDoesNotExistException` control-flow signal.
 - Check status codes against `org.apache.http.HttpStatus` constants; branch on the ones you expect and log unexpected ones.
-- Alexa user/person/session IDs exceed the 64-char limit of the memory backend, so hash them to 64 hex chars with SHA-256 before use. Sanitize identifiers at the integration boundary, not in handlers. The user-memory ownerId uses the shared `helpers/OwnerId.sanitize(...)` (single source of truth, because read and write must match exactly); the RAM REST paths still use their own class-local `sanitizeOwnerId` / `sanitizeSessionId` copies.
+- Alexa user/person/session IDs are long, so hash them to 64 hex chars with SHA-256 before using them as storage keys. Sanitize identifiers at the integration boundary, not in handlers. The user-record PK and the user-memory ownerId both use the shared `helpers/OwnerId.sanitize(...)` (single source of truth, because a user's read and write paths must derive the same key); the session-memory partition key uses `WorkingMemoryStore`'s own class-local `sanitizeSessionId` (a distinct isolation key, not an ownerId).
 
 ## Custom LangChain4J extensions
 
@@ -119,7 +119,8 @@ Keep code and infrastructure in lockstep: **any code change that reads new confi
 - One file drives the skill: `infrastructure/my-jarvis-alexa-skill.tf`; inputs in `variables.tf`; example values in `terraform.tfvars.example` (never commit real `terraform.tfvars`).
 - The build is wired into Terraform: a `null_resource` runs `mvn clean package`, the JAR is uploaded to S3, and the Lambda's `handler` points at `com.riferrei.myjarvis.MyJarvisStreamHandler::handleRequest`. If you rename the entry point or change the artifact coordinates in `lambda/pom.xml`, update the `.tf` references too.
 - IAM is least-privilege and resource-scoped (e.g. S3 and S3 Vectors actions scoped to specific bucket/index ARNs). Add only the actions a change actually needs, scoped to the new resource's ARN.
-- Prefer provisioning storage in Terraform (as with the S3 Vectors bucket/index). The **exception** is the user-memory DynamoDB vector table: the AWS provider has no resource for a DynamoDB *vector* table/index, so the Lambda self-creates it via `createTableIfNotExists(true)`. That table is not in Terraform state; its IAM (in the `.tf`) therefore also grants `dynamodb:CreateTable`/`DescribeTable`, still scoped to the table ARN. Revisit this if the provider adds native support.
+- Prefer provisioning storage in Terraform (as with the S3 Vectors bucket/index and the two **plain** DynamoDB tables — the users table and the session-memory table, both `aws_dynamodb_table`, `PAY_PER_REQUEST`). The session-memory table declares a DynamoDB TTL on the `expiresAt` attribute; because TTL deletion is imprecise (items linger up to ~48h past expiry), `WorkingMemoryStore` *also* filters expired events at read time so the effective session lifetime matches `session_memory_ttl_minutes` (default 5). The **exception** to Terraform-owned storage is the user-memory DynamoDB *vector* table: the AWS provider has no resource for a DynamoDB vector table/index, so the Lambda self-creates it via `createTableIfNotExists(true)`. That table is not in Terraform state; its IAM (in the `.tf`) therefore also grants `dynamodb:CreateTable`/`DescribeTable`, still scoped to the table ARN. Revisit this if the provider adds native support.
+- The Redis Agent Memory REST API is fully retired: user records live in the plain users table (accessed directly by `UserService`) and short-term chat memory lives in the plain session-memory table (accessed directly by the `WorkingMemoryStore` SPI). LangCache is still Redis — there is no AWS-native semantic cache equivalent.
 - Mark secret variables `sensitive = true`. Give resources `default`s only when a sensible one exists.
 - Validate infra changes with `terraform fmt` + `terraform validate` (init with `-backend=false` is enough to validate without cloud credentials).
 

@@ -71,6 +71,39 @@ resource "aws_s3vectors_index" "my_jarvis_alexa_skill_handler_knowledge_base_ind
   distance_metric = "cosine"
 }
 
+resource "aws_dynamodb_table" "my_jarvis_alexa_skill_handler_users" {
+  name         = var.dynamodb_users_table_name
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "userId"
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+}
+
+resource "aws_dynamodb_table" "my_jarvis_alexa_skill_handler_session_memory" {
+  name         = var.dynamodb_session_memory_table_name
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "sessionId"
+  range_key    = "eventId"
+
+  attribute {
+    name = "sessionId"
+    type = "S"
+  }
+
+  attribute {
+    name = "eventId"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "expiresAt"
+    enabled        = true
+  }
+}
+
 resource "aws_iam_role" "my_jarvis_alexa_skill_handler_role" {
   name               = "${var.application_prefix}-_role"
   assume_role_policy = <<EOF
@@ -163,6 +196,28 @@ resource "aws_iam_role_policy" "my_jarvis_alexa_skill_handler_role_policy" {
           "arn:aws:dynamodb:*:*:table/${var.dynamodb_user_memory_table_name}",
           "arn:aws:dynamodb:*:*:table/${var.dynamodb_user_memory_table_name}/index/*"
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem"
+        ]
+        Resource = [
+          aws_dynamodb_table.my_jarvis_alexa_skill_handler_users.arn
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:Query",
+          "dynamodb:PutItem",
+          "dynamodb:BatchWriteItem",
+          "dynamodb:DeleteItem"
+        ]
+        Resource = [
+          aws_dynamodb_table.my_jarvis_alexa_skill_handler_session_memory.arn
+        ]
       }
     ]
   })
@@ -173,7 +228,9 @@ resource "aws_lambda_function" "my_jarvis_alexa_skill_handler" {
     null_resource.my_jarvis_alexa_skill_handler_build,
     aws_iam_role.my_jarvis_alexa_skill_handler_role,
     aws_s3_object.my_jarvis_skill_handler_lambda_jar,
-    aws_s3vectors_index.my_jarvis_alexa_skill_handler_knowledge_base_index
+    aws_s3vectors_index.my_jarvis_alexa_skill_handler_knowledge_base_index,
+    aws_dynamodb_table.my_jarvis_alexa_skill_handler_users,
+    aws_dynamodb_table.my_jarvis_alexa_skill_handler_session_memory
   ]
   function_name    = "${var.application_prefix}-function"
   description      = "Backend function for the My Jarvis Alexa Skill"
@@ -196,9 +253,6 @@ resource "aws_lambda_function" "my_jarvis_alexa_skill_handler" {
       REDIS_LANGCACHE_API_BASE_URL = var.langcache_api_base_url
       REDIS_LANGCACHE_API_KEY      = var.langcache_api_key
       REDIS_LANGCACHE_CACHE_ID     = var.langcache_cache_id
-      REDIS_AGENT_MEMORY_API_URL   = var.redis_agent_memory_api_url
-      REDIS_AGENT_MEMORY_API_KEY   = var.redis_agent_memory_api_key
-      REDIS_AGENT_MEMORY_STORE_ID  = var.redis_agent_memory_store_id
       KNOWLEDGE_BASE_BUCKET_NAME   = local.knowledge_base_bucket_name
       S3_VECTORS_BUCKET_NAME       = aws_s3vectors_vector_bucket.my_jarvis_alexa_skill_handler_knowledge_base_vectors.vector_bucket_name
       S3_VECTORS_INDEX_NAME        = aws_s3vectors_index.my_jarvis_alexa_skill_handler_knowledge_base_index.index_name
@@ -206,6 +260,10 @@ resource "aws_lambda_function" "my_jarvis_alexa_skill_handler" {
 
       DYNAMODB_USER_MEMORY_TABLE_NAME = var.dynamodb_user_memory_table_name
       DYNAMODB_USER_MEMORY_INDEX_NAME = var.dynamodb_user_memory_index_name
+
+      DYNAMODB_USERS_TABLE_NAME          = aws_dynamodb_table.my_jarvis_alexa_skill_handler_users.name
+      DYNAMODB_SESSION_MEMORY_TABLE_NAME = aws_dynamodb_table.my_jarvis_alexa_skill_handler_session_memory.name
+      SESSION_MEMORY_TTL_MINUTES         = var.session_memory_ttl_minutes
     }
   }
 }

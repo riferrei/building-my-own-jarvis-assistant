@@ -55,22 +55,6 @@ variable "langcache_cache_id" {
   type        = string
 }
 
-variable "redis_agent_memory_api_url" {
-  description = "Redis Agent Memory managed service API endpoint"
-  type        = string
-}
-
-variable "redis_agent_memory_api_key" {
-  description = "Redis Agent Memory managed service API key (Bearer token)"
-  type        = string
-  sensitive   = true
-}
-
-variable "redis_agent_memory_store_id" {
-  description = "Redis Agent Memory Store ID"
-  type        = string
-}
-
 variable "alexa_skill_id" {
   type = string
 }
@@ -106,6 +90,22 @@ variable "dynamodb_user_memory_index_name" {
   description = "Vector index name within the user-memory DynamoDB table"
   type        = string
   default     = "user-memories"
+}
+
+variable "dynamodb_users_table_name" {
+  description = "DynamoDB table that maps each Alexa user to a spoken name (plain, non-vector)"
+  type        = string
+}
+
+variable "dynamodb_session_memory_table_name" {
+  description = "DynamoDB table that stores the short-term chat transcript per session (plain, non-vector, TTL-expired)"
+  type        = string
+}
+
+variable "session_memory_ttl_minutes" {
+  description = "Minutes a short-term session-memory event lives before it is treated as expired (and eventually TTL-deleted)"
+  type        = number
+  default     = 5
 }
 
 variable "create_knowledge_base_bucket" {

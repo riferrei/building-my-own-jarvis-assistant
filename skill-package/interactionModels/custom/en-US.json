@@ -108,16 +108,6 @@
         {
           "name": "AMAZON.NavigateHomeIntent",
           "samples": []
-        },
-        {
-          "name": "AgentMemoryIntent",
-          "slots": [],
-          "samples": [
-            "to check the agent memory",
-            "check the agent memory",
-            "to check agent memory",
-            "check agent memory"
-          ]
         }
       ],
       "types": []

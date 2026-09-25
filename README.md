@@ -16,10 +16,9 @@ This project demonstrates how to create a [J.A.R.V.I.S](https://en.wikipedia.org
 
 ## Demo Objectives
 - Demonstrate how to implement context engineering patterns with LangChain4J.
-- Demonstrate Redis Agent Memory as a memory persistence layer for AI context.
+- Demonstrate DynamoDB (plain and vector tables) as the persistence layer for user records, short-term session memory, and long-term user memories.
 - Demonstrate Redis LangCache as a semantic cache layer for human interactions.
 - Automate Alexa skill deployment using Terraform, AWS Lambda, and the ASK CLI.
-- Illustrate how Redis Iris supports scalable AI use cases in need of context.
 
 ## Setup
 
@@ -39,7 +38,7 @@ This project demonstrates how to create a [J.A.R.V.I.S](https://en.wikipedia.org
 | [Amazon developer account](https://developer.amazon.com) | This is needed to register, deploy, and test Alexa skills.                   |
 | [OpenAI](https://auth.openai.com/create-account)         | LLM that will power the intelligent responses for the skill.                 |
 | [Cohere](https://cohere.com)                             | Scoring model used to deduplicate memories from the context.                 |
-| [Redis Cloud](https://redis.io/try-free)                 | Required for Redis Agent Memory (managed AI memory service) and LangCache.   |
+| [Redis Cloud](https://redis.io/try-free)                 | Required for Redis LangCache (managed semantic cache).                        |
 
 ### Configuration
 
@@ -81,16 +80,15 @@ This project demonstrates how to create a [J.A.R.V.I.S](https://en.wikipedia.org
 | `langcache_api_base_url`       | Base URL for the Redis LangCache service.                                              |
 | `langcache_api_key`            | API key for the Redis LangCache service.                                               |
 | `langcache_cache_id`           | Cache ID for the Redis LangCache service.                                              |
-| `redis_agent_memory_api_url`   | Base URL for the Redis Agent Memory service (e.g., `https://<region>.agent-memory.redis.io`). |
-| `redis_agent_memory_api_key`   | API key for authenticating with the Redis Agent Memory service.                        |
-| `redis_agent_memory_store_id`  | Store ID of the memory store created in Redis Agent Memory.                            |
 | `knowledge_base_bucket_name`   | Name of the S3 bucket used to upload knowledge base documents.                         |
+| `dynamodb_users_table_name`    | DynamoDB table mapping each Alexa user to a spoken name (plain, non-vector).           |
+| `dynamodb_session_memory_table_name` | DynamoDB table holding the short-term chat transcript per session (plain, TTL-expired). |
+| `session_memory_ttl_minutes`   | Minutes a session-memory event lives before it expires. Optional; defaults to `5`.     |
+| `dynamodb_user_memory_table_name` | DynamoDB *vector* table storing every user's long-term memories (shared, isolated by ownerId). |
 | `alexa_skill_id`               | The Alexa skill ID assigned by the Amazon Developer Console.                           |
 
-#### Redis Agent Memory Setup
-1. Log in to [Redis Cloud](https://redis.io/try-free) and navigate to the **Agent Memory** section.
-2. Create a new memory store and note the **API URL**, **API key**, and **Store ID**.
-3. Set these as the `redis_agent_memory_api_url`, `redis_agent_memory_api_key`, and `redis_agent_memory_store_id` variables in your `terraform.tfvars`.
+#### DynamoDB Setup
+No manual steps are required. Terraform provisions the plain **users** and **session-memory** tables, and the Lambda self-creates the long-term user-memory **vector** table on first use (the AWS provider has no resource for a DynamoDB vector table). Set the table names via the `dynamodb_*_table_name` variables in your `terraform.tfvars`.
 
 #### Redis LangCache Setup
 
@@ -103,10 +101,6 @@ Once configured, deploy everything using:
 ```
 
 When the deployment completes, note the output values including the Lambda ARN and function URL.
-
-You can verify if the Agent Memory service is reachable by saying:
-
-> “Alexa, ask my jarvis to check the memory server.”
 
 ## Running the Demo
 
@@ -132,16 +126,16 @@ Covers demo goals, motivations for a memory layer, and architecture overview.
 
 ## Architecture
 ![Software Architecture](./images/software-architecture.png)
-This architecture uses an Alexa skill written in Java and hosted as an AWS Lambda function. The Lambda implements a stream handler that processes user requests and responses, using Redis Agent Memory and Redis LangCache — which are managed services on Redis Cloud — as its backend layer.
+This architecture uses an Alexa skill written in Java and hosted as an AWS Lambda function. The Lambda implements a stream handler that processes user requests and responses, using DynamoDB (plain tables for user records and short-term session memory, plus a vector table for long-term user memories) and Redis LangCache — a managed semantic cache on Redis Cloud — as its backend layer.
 
 ![Chat Assistant Service](./assets/chat-assistant-service.png)
-As part of the stream handler implementation, it uses a Chat Assistant Service that leverages LangChain4J to manage interactions with Redis Agent Memory. This service implements context engineering, ensuring that conversations are enriched with relevant historical data retrieved from Redis. OpenAI is the LLM used to process and generate responses.
+As part of the stream handler implementation, it uses a Chat Assistant Service that leverages LangChain4J to manage interactions with the memory stores. This service implements context engineering, ensuring that conversations are enriched with relevant historical data retrieved from DynamoDB. OpenAI is the LLM used to process and generate responses.
 
 ## Known Issues
 - Alexa Developer Console may require manual linking if credentials are not fully synchronized.
 
 ## Resources
-- [Redis Agent Memory](https://redis.io/docs/latest/operate/rc/agent-memory/)
+- [Amazon DynamoDB](https://docs.aws.amazon.com/dynamodb/)
 - [Redis Cloud](https://redis.io/try-free)
 - [AWS Lambda Documentation](https://docs.aws.amazon.com/lambda)
 - [Amazon Alexa Skills Kit](https://developer.amazon.com/en-US/alexa/alexa-skills-kit)

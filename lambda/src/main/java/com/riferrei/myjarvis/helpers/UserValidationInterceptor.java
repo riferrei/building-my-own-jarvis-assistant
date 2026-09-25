@@ -26,7 +26,6 @@ public class UserValidationInterceptor implements RequestInterceptor {
             AMAZON_STOP_INTENT,
             AMAZON_HELP_INTENT,
             AMAZON_FALLBACK_INTENT,
-            AGENT_MEMORY_INTENT,
             KNOWLEDGE_BASE_INTENT,
             USER_INTRO_INTENT
     );
