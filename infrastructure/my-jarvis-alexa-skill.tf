@@ -57,6 +57,20 @@ resource "aws_s3_object" "my_jarvis_alexa_skill_handler_knowledge_base_failed_fo
   key    = "failed/"
 }
 
+resource "aws_s3vectors_vector_bucket" "my_jarvis_alexa_skill_handler_knowledge_base_vectors" {
+  vector_bucket_name = var.s3_vectors_bucket_name
+}
+
+resource "aws_s3vectors_index" "my_jarvis_alexa_skill_handler_knowledge_base_index" {
+  index_name         = var.s3_vectors_index_name
+  vector_bucket_name = aws_s3vectors_vector_bucket.my_jarvis_alexa_skill_handler_knowledge_base_vectors.vector_bucket_name
+
+  data_type = "float32"
+  # 1536 matches OpenAI text-embedding-3-small; keep in sync with embedding_model_name.
+  dimension       = 1536
+  distance_metric = "cosine"
+}
+
 resource "aws_iam_role" "my_jarvis_alexa_skill_handler_role" {
   name               = "${var.application_prefix}-_role"
   assume_role_policy = <<EOF
@@ -114,6 +128,22 @@ resource "aws_iam_role_policy" "my_jarvis_alexa_skill_handler_role_policy" {
           "arn:aws:s3:::${local.knowledge_base_bucket_name}/*",
           "arn:aws:s3:::${local.knowledge_base_bucket_name}"
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3vectors:GetVectorBucket",
+          "s3vectors:GetIndex",
+          "s3vectors:PutVectors",
+          "s3vectors:GetVectors",
+          "s3vectors:QueryVectors",
+          "s3vectors:ListVectors",
+          "s3vectors:DeleteVectors"
+        ]
+        Resource = [
+          aws_s3vectors_vector_bucket.my_jarvis_alexa_skill_handler_knowledge_base_vectors.vector_bucket_arn,
+          aws_s3vectors_index.my_jarvis_alexa_skill_handler_knowledge_base_index.index_arn
+        ]
       }
     ]
   })
@@ -123,7 +153,8 @@ resource "aws_lambda_function" "my_jarvis_alexa_skill_handler" {
   depends_on = [
     null_resource.my_jarvis_alexa_skill_handler_build,
     aws_iam_role.my_jarvis_alexa_skill_handler_role,
-    aws_s3_object.my_jarvis_skill_handler_lambda_jar
+    aws_s3_object.my_jarvis_skill_handler_lambda_jar,
+    aws_s3vectors_index.my_jarvis_alexa_skill_handler_knowledge_base_index
   ]
   function_name    = "${var.application_prefix}-function"
   description      = "Backend function for the My Jarvis Alexa Skill"
@@ -137,19 +168,22 @@ resource "aws_lambda_function" "my_jarvis_alexa_skill_handler" {
   timeout          = 60
   environment {
     variables = {
-      OPENAI_API_KEY                = var.openai_api_key
-      OPENAI_MODEL_NAME             = var.openai_model_name
-      OPENAI_CHAT_TEMPERATURE       = var.openai_chat_temperature
-      OPENAI_CHAT_MAX_TOKENS        = var.openai_chat_max_tokens
-      COHERE_API_KEY                = var.cohere_api_key
-      COHERE_MODEL_NAME             = var.cohere_model_name
-      REDIS_LANGCACHE_API_BASE_URL   = var.langcache_api_base_url
-      REDIS_LANGCACHE_API_KEY        = var.langcache_api_key
-      REDIS_LANGCACHE_CACHE_ID       = var.langcache_cache_id
-      REDIS_AGENT_MEMORY_API_URL     = var.redis_agent_memory_api_url
-      REDIS_AGENT_MEMORY_API_KEY     = var.redis_agent_memory_api_key
-      REDIS_AGENT_MEMORY_STORE_ID    = var.redis_agent_memory_store_id
-      KNOWLEDGE_BASE_BUCKET_NAME     = local.knowledge_base_bucket_name
+      OPENAI_API_KEY               = var.openai_api_key
+      OPENAI_MODEL_NAME            = var.openai_model_name
+      OPENAI_CHAT_TEMPERATURE      = var.openai_chat_temperature
+      OPENAI_CHAT_MAX_TOKENS       = var.openai_chat_max_tokens
+      COHERE_API_KEY               = var.cohere_api_key
+      COHERE_MODEL_NAME            = var.cohere_model_name
+      REDIS_LANGCACHE_API_BASE_URL = var.langcache_api_base_url
+      REDIS_LANGCACHE_API_KEY      = var.langcache_api_key
+      REDIS_LANGCACHE_CACHE_ID     = var.langcache_cache_id
+      REDIS_AGENT_MEMORY_API_URL   = var.redis_agent_memory_api_url
+      REDIS_AGENT_MEMORY_API_KEY   = var.redis_agent_memory_api_key
+      REDIS_AGENT_MEMORY_STORE_ID  = var.redis_agent_memory_store_id
+      KNOWLEDGE_BASE_BUCKET_NAME   = local.knowledge_base_bucket_name
+      S3_VECTORS_BUCKET_NAME       = aws_s3vectors_vector_bucket.my_jarvis_alexa_skill_handler_knowledge_base_vectors.vector_bucket_name
+      S3_VECTORS_INDEX_NAME        = aws_s3vectors_index.my_jarvis_alexa_skill_handler_knowledge_base_index.index_name
+      EMBEDDING_MODEL_NAME         = var.embedding_model_name
     }
   }
 }

@@ -29,7 +29,6 @@ public class MemoryService {
 
     private static final String USERS_NAMESPACE = "users";
     private static final String LONG_TERM_MEMORY_NAMESPACE = "long-term-memory";
-    private static final String KNOWLEDGE_NAMESPACE = "knowledge-base";
     private static final String MEMORY_TYPE_SEMANTIC = "semantic";
 
     private final String apiUrl;
@@ -241,48 +240,6 @@ public class MemoryService {
         }
 
         return false;
-    }
-
-    public void createKnowledgeBaseEntry(String memory) {
-        var sanitizedMemory = Optional.ofNullable(memory)
-                .map(m -> m.replaceAll("[\\r\\n]+", " "))
-                .map(m -> m.replaceAll("[\\p{Cntrl}&&[^\\r\\n\\t]]", ""))
-                .orElse("");
-
-        var formattedMemory = "Fact from %s, %s".formatted(Instant.now(), sanitizedMemory);
-
-        var memoryData = Map.of(
-                "memories", List.of(Map.of(
-                        "id", UUID.randomUUID().toString(),
-                        "namespace", KNOWLEDGE_NAMESPACE,
-                        "text", formattedMemory,
-                        "memoryType", MEMORY_TYPE_SEMANTIC
-                ))
-        );
-
-        try {
-            var request = buildJsonRequest(
-                    URI.create(storeUrl("/long-term-memory")),
-                    memoryData,
-                    "POST"
-            );
-
-            httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        } catch (Exception ex) {
-            logger.error("Exception occurred while creating long-term memory", ex);
-        }
-    }
-
-    public List<String> searchKnowledgeBase(String memory) {
-        var searchRequest = Map.of(
-                "text", memory,
-                "limit", Integer.parseInt(KNOWLEDGE_BASE_SEARCH_LIMIT),
-                "filter", Map.of(
-                        "namespace", Map.of("eq", KNOWLEDGE_NAMESPACE)
-                )
-        );
-
-        return extractTexts(executeSearch(searchRequest));
     }
 
     // ---------------------------------------------------------------------------

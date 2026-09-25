@@ -36,6 +36,13 @@ public enum Constants {
     public static final String COHERE_MODEL_NAME = System.getenv("COHERE_MODEL_NAME");
     public static final String KNOWLEDGE_BASE_BUCKET_NAME = System.getenv("KNOWLEDGE_BASE_BUCKET_NAME");
 
+    public static final String S3_VECTORS_BUCKET_NAME = System.getenv("S3_VECTORS_BUCKET_NAME");
+    public static final String S3_VECTORS_INDEX_NAME = System.getenv("S3_VECTORS_INDEX_NAME");
+    public static final String EMBEDDING_MODEL_NAME =
+            (System.getenv("EMBEDDING_MODEL_NAME") == null ||
+                    System.getenv("EMBEDDING_MODEL_NAME").isEmpty())
+                    ? "text-embedding-3-small" : System.getenv("EMBEDDING_MODEL_NAME");
+
     public static final String MAX_SEGMENT_SIZE_IN_CHARS =
             (System.getenv("MAX_SEGMENT_SIZE_IN_CHARS") == null ||
                     System.getenv("MAX_SEGMENT_SIZE_IN_CHARS").isEmpty())
@@ -54,5 +61,5 @@ public enum Constants {
     public static final String KNOWLEDGE_BASE_SEARCH_LIMIT =
             (System.getenv("KNOWLEDGE_BASE_SEARCH_LIMIT") == null ||
                     System.getenv("KNOWLEDGE_BASE_SEARCH_LIMIT").isEmpty())
-                    ? String.valueOf(1) : System.getenv("KNOWLEDGE_BASE_SEARCH_LIMIT");
+                    ? String.valueOf(5) : System.getenv("KNOWLEDGE_BASE_SEARCH_LIMIT");
 }

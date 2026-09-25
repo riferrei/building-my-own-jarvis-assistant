@@ -11,12 +11,16 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
 import dev.langchain4j.data.document.Document;
 import dev.langchain4j.data.document.DocumentParser;
 import dev.langchain4j.data.document.DocumentSplitter;
-import com.riferrei.myjarvis.services.MemoryService;
+import dev.langchain4j.data.document.Metadata;
+import dev.langchain4j.data.segment.TextSegment;
+import dev.langchain4j.model.embedding.EmbeddingModel;
+import dev.langchain4j.store.embedding.EmbeddingStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.InputStream;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -32,16 +36,19 @@ public class KnowledgeBaseIntentHandler implements RequestHandler {
     private static final String FOLDER_DELIMITER = "/";
 
     private final DocumentParser documentParser;
-    private final MemoryService memoryService;
+    private final EmbeddingModel embeddingModel;
+    private final EmbeddingStore<TextSegment> embeddingStore;
     private final AmazonS3 s3Client;
     private final DocumentSplitter documentSplitter;
 
     public KnowledgeBaseIntentHandler(DocumentParser documentParser,
                                       DocumentSplitter documentSplitter,
-                                      MemoryService memoryService) {
+                                      EmbeddingModel embeddingModel,
+                                      EmbeddingStore<TextSegment> embeddingStore) {
         this.documentParser = documentParser;
         this.documentSplitter = documentSplitter;
-        this.memoryService = memoryService;
+        this.embeddingModel = embeddingModel;
+        this.embeddingStore = embeddingStore;
         this.s3Client = AmazonS3ClientBuilder.defaultClient();
 
     }
@@ -147,7 +154,8 @@ public class KnowledgeBaseIntentHandler implements RequestHandler {
                     continue;
                 }
 
-                // Create entry with metadata
+                // Create entry with provenance metadata, then embed and store it
+                // in the S3 Vectors-backed knowledge base.
                 var entryText = formatSegmentWithMetadata(
                         segment.text(),
                         fileName,
@@ -155,8 +163,15 @@ public class KnowledgeBaseIntentHandler implements RequestHandler {
                         segments.size()
                 );
 
+                var textSegment = TextSegment.from(entryText, Metadata.from(Map.of(
+                        "file_name", fileName,
+                        "section", String.valueOf(i + 1),
+                        "total_sections", String.valueOf(segments.size())
+                )));
+
                 try {
-                    memoryService.createKnowledgeBaseEntry(entryText);
+                    var embedding = embeddingModel.embed(textSegment).content();
+                    embeddingStore.add(embedding, textSegment);
                     chunksStored++;
                 } catch (Exception e) {
                     logger.warn("Failed to store segment {} of {} from {}",

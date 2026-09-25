@@ -13,4 +13,9 @@ redis_agent_memory_api_key  = "your-agent-memory-api-key"
 redis_agent_memory_store_id = "your-agent-memory-store-id"
 
 knowledge_base_bucket_name = "ams-with-alexa-demo-knowledge-base"
+
+s3_vectors_bucket_name = "ams-with-alexa-demo-knowledge-base-vectors"
+s3_vectors_index_name  = "knowledge-base"
+embedding_model_name   = "text-embedding-3-small"
+
 alexa_skill_id = "your-alexa-skill-id"

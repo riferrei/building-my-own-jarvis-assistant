@@ -36,7 +36,7 @@ variable "cohere_api_key" {
 variable "cohere_model_name" {
   description = "Model name for scoring model"
   type        = string
-  default = "rerank-multilingual-v3.0"
+  default     = "rerank-multilingual-v3.0"
 }
 
 variable "langcache_api_base_url" {
@@ -78,6 +78,23 @@ variable "alexa_skill_id" {
 variable "knowledge_base_bucket_name" {
   description = "S3 bucket for knowledge data files"
   type        = string
+}
+
+variable "s3_vectors_bucket_name" {
+  description = "S3 Vectors vector bucket that backs the knowledge base embeddings"
+  type        = string
+}
+
+variable "s3_vectors_index_name" {
+  description = "S3 Vectors index name within the vector bucket"
+  type        = string
+  default     = "knowledge-base"
+}
+
+variable "embedding_model_name" {
+  description = "OpenAI embedding model used for the knowledge base (must match code default dimension)"
+  type        = string
+  default     = "text-embedding-3-small"
 }
 
 variable "create_knowledge_base_bucket" {
