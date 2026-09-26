@@ -22,10 +22,8 @@ public enum Constants {
     public static final String MEMORY_PARAM = "memory";
     public static final String QUERY_PARAM = "query";
 
-    public static final String OPENAI_API_KEY = System.getenv("OPENAI_API_KEY");
-    public static final String OPENAI_MODEL_NAME = System.getenv("OPENAI_MODEL_NAME");
-    public static final String OPENAI_CHAT_TEMPERATURE = System.getenv("OPENAI_CHAT_TEMPERATURE");
-    public static final String OPENAI_CHAT_MAX_TOKENS = System.getenv("OPENAI_CHAT_MAX_TOKENS");
+    public static final String BEDROCK_CHAT_MODEL_ID = System.getenv("BEDROCK_CHAT_MODEL_ID");
+    public static final String BEDROCK_CHAT_MAX_TOKENS = System.getenv("BEDROCK_CHAT_MAX_TOKENS");
     public static final String COHERE_API_KEY = System.getenv("COHERE_API_KEY");
     public static final String COHERE_MODEL_NAME = System.getenv("COHERE_MODEL_NAME");
     public static final String KNOWLEDGE_BASE_BUCKET_NAME = System.getenv("KNOWLEDGE_BASE_BUCKET_NAME");
@@ -41,6 +39,11 @@ public enum Constants {
                     System.getenv("SESSION_MEMORY_TTL_MINUTES").isEmpty())
                     ? String.valueOf(5) : System.getenv("SESSION_MEMORY_TTL_MINUTES");
 
+    public static final String SESSION_MEMORY_MAX_MESSAGES =
+            (System.getenv("SESSION_MEMORY_MAX_MESSAGES") == null ||
+                    System.getenv("SESSION_MEMORY_MAX_MESSAGES").isEmpty())
+                    ? String.valueOf(20) : System.getenv("SESSION_MEMORY_MAX_MESSAGES");
+
     public static final String DYNAMODB_USER_MEMORY_TABLE_NAME = System.getenv("DYNAMODB_USER_MEMORY_TABLE_NAME");
     public static final String DYNAMODB_USER_MEMORY_INDEX_NAME =
             (System.getenv("DYNAMODB_USER_MEMORY_INDEX_NAME") == null ||
@@ -50,7 +53,12 @@ public enum Constants {
     public static final String EMBEDDING_MODEL_NAME =
             (System.getenv("EMBEDDING_MODEL_NAME") == null ||
                     System.getenv("EMBEDDING_MODEL_NAME").isEmpty())
-                    ? "text-embedding-3-small" : System.getenv("EMBEDDING_MODEL_NAME");
+                    ? "amazon.titan-embed-text-v2:0" : System.getenv("EMBEDDING_MODEL_NAME");
+
+    public static final String EMBEDDING_DIMENSIONS =
+            (System.getenv("EMBEDDING_DIMENSIONS") == null ||
+                    System.getenv("EMBEDDING_DIMENSIONS").isEmpty())
+                    ? String.valueOf(1024) : System.getenv("EMBEDDING_DIMENSIONS");
 
     public static final String MAX_SEGMENT_SIZE_IN_CHARS =
             (System.getenv("MAX_SEGMENT_SIZE_IN_CHARS") == null ||

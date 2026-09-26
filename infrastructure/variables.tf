@@ -4,25 +4,19 @@ variable "application_prefix" {
 }
 
 
-variable "openai_api_key" {
-  description = "OpenAI API key"
+variable "bedrock_chat_model_id" {
+  description = "Amazon Bedrock global inference profile ID for the chat model"
   type        = string
-  sensitive   = true
+  default     = "global.anthropic.claude-sonnet-5"
+
+  validation {
+    condition     = startswith(var.bedrock_chat_model_id, "global.")
+    error_message = "bedrock_chat_model_id must be a global inference profile ID (global.*)."
+  }
 }
 
-variable "openai_model_name" {
-  description = "OpenAI model name for the skill"
-  type        = string
-}
-
-variable "openai_chat_temperature" {
-  description = "Temperature setting for OpenAI chat model"
-  type        = number
-  default     = 0.8
-}
-
-variable "openai_chat_max_tokens" {
-  description = "Maximum tokens for OpenAI chat model"
+variable "bedrock_chat_max_tokens" {
+  description = "Maximum output tokens for the Amazon Bedrock chat model"
   type        = number
   default     = 4096
 }
@@ -60,9 +54,20 @@ variable "s3_vectors_index_name" {
 }
 
 variable "embedding_model_name" {
-  description = "OpenAI embedding model used for the knowledge base (must match code default dimension)"
+  description = "Amazon Bedrock embedding model used for the knowledge base and user memories"
   type        = string
-  default     = "text-embedding-3-small"
+  default     = "amazon.titan-embed-text-v2:0"
+}
+
+variable "embedding_dimensions" {
+  description = "Output dimensions of the embedding model; also sets the S3 Vectors index dimension"
+  type        = number
+  default     = 1024
+
+  validation {
+    condition     = contains([256, 512, 1024], var.embedding_dimensions)
+    error_message = "embedding_dimensions must be 256, 512, or 1024 for Titan Text Embeddings V2."
+  }
 }
 
 variable "dynamodb_user_memory_table_name" {
@@ -90,6 +95,12 @@ variable "session_memory_ttl_minutes" {
   description = "Minutes a short-term session-memory event lives before it is treated as expired (and eventually TTL-deleted)"
   type        = number
   default     = 5
+}
+
+variable "session_memory_max_messages" {
+  description = "Maximum number of most recent session-memory messages replayed to the chat model per request"
+  type        = number
+  default     = 20
 }
 
 variable "create_knowledge_base_bucket" {

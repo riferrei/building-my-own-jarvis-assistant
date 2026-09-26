@@ -9,22 +9,22 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 
-public class WorkingMemoryChat implements ChatMemory {
+public class SessionChatMemory implements ChatMemory {
 
-    private static final Logger logger = LoggerFactory.getLogger(WorkingMemoryChat.class);
+    private static final Logger logger = LoggerFactory.getLogger(SessionChatMemory.class);
 
     private final String id;
     private final ChatMemoryStore chatMemoryStore;
     private final List<ChatMessage> messages;
 
-    public WorkingMemoryChat(String id,
+    public SessionChatMemory(String id,
                              ChatMemoryStore chatMemoryStore) {
         this.id = id;
         this.chatMemoryStore = chatMemoryStore;
 
         // Load existing messages
         this.messages = new ArrayList<>(chatMemoryStore.getMessages(id));
-        logger.debug("Initialized WorkingMemoryChat for session {} with {} messages",
+        logger.debug("Initialized SessionChatMemory for session {} with {} messages",
                 id, this.messages.size());
     }
 
@@ -68,8 +68,8 @@ public class WorkingMemoryChat implements ChatMemory {
             return this;
         }
 
-        public WorkingMemoryChat build() {
-            return new WorkingMemoryChat(id, chatMemoryStore);
+        public SessionChatMemory build() {
+            return new SessionChatMemory(id, chatMemoryStore);
         }
     }
 }

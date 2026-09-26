@@ -65,9 +65,8 @@ resource "aws_s3vectors_index" "my_jarvis_alexa_skill_handler_knowledge_base_ind
   index_name         = var.s3_vectors_index_name
   vector_bucket_name = aws_s3vectors_vector_bucket.my_jarvis_alexa_skill_handler_knowledge_base_vectors.vector_bucket_name
 
-  data_type = "float32"
-  # 1536 matches OpenAI text-embedding-3-small; keep in sync with embedding_model_name.
-  dimension       = 1536
+  data_type       = "float32"
+  dimension       = var.embedding_dimensions
   distance_metric = "cosine"
 }
 
@@ -104,8 +103,68 @@ resource "aws_dynamodb_table" "my_jarvis_alexa_skill_handler_session_memory" {
   }
 }
 
+data "aws_caller_identity" "current" {}
+
+data "aws_region" "current" {}
+
+locals {
+  user_memory_vector_indexes = jsonencode([{
+    IndexName        = var.dynamodb_user_memory_index_name
+    VectorAttribute  = { AttributeName = "embedding" }
+    Dimensions       = var.embedding_dimensions
+    DistanceFunction = "COSINE"
+    Projection       = { ProjectionType = "ALL" }
+    SearchSchema     = [{ AttributeName = "ownerId", SearchSchemaElementType = "INLINE_FILTER" }]
+  }])
+}
+
+resource "null_resource" "my_jarvis_alexa_skill_handler_user_memories" {
+  triggers = {
+    region         = data.aws_region.current.region
+    table_name     = var.dynamodb_user_memory_table_name
+    vector_indexes = local.user_memory_vector_indexes
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["bash", "-c"]
+    command     = <<-EOT
+      set -euo pipefail
+      aws dynamodb create-table --region "$REGION" --table-name "$TABLE_NAME" \
+        --billing-mode PAY_PER_REQUEST \
+        --attribute-definitions AttributeName=id,AttributeType=S AttributeName=ownerId,AttributeType=S \
+        --key-schema AttributeName=id,KeyType=HASH \
+        --vector-indexes "$VECTOR_INDEXES" > /dev/null
+      aws dynamodb wait table-exists --region "$REGION" --table-name "$TABLE_NAME"
+    EOT
+    environment = {
+      REGION         = self.triggers.region
+      TABLE_NAME     = self.triggers.table_name
+      VECTOR_INDEXES = self.triggers.vector_indexes
+    }
+  }
+
+  provisioner "local-exec" {
+    when        = destroy
+    interpreter = ["bash", "-c"]
+    command     = <<-EOT
+      set -euo pipefail
+      aws dynamodb delete-table --region "$REGION" --table-name "$TABLE_NAME" > /dev/null
+      aws dynamodb wait table-not-exists --region "$REGION" --table-name "$TABLE_NAME"
+    EOT
+    environment = {
+      REGION     = self.triggers.region
+      TABLE_NAME = self.triggers.table_name
+    }
+  }
+}
+
+locals {
+  bedrock_chat_model_name            = trimprefix(var.bedrock_chat_model_id, "global.")
+  bedrock_chat_inference_profile_arn = "arn:aws:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:inference-profile/${var.bedrock_chat_model_id}"
+}
+
 resource "aws_iam_role" "my_jarvis_alexa_skill_handler_role" {
-  name               = "${var.application_prefix}-_role"
+  name               = "${var.application_prefix}-role"
   assume_role_policy = <<EOF
 {
   "Version": "2012-10-17",
@@ -127,6 +186,43 @@ resource "aws_iam_role_policy" "my_jarvis_alexa_skill_handler_role_policy" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "bedrock:InvokeModel"
+        Resource = local.bedrock_chat_inference_profile_arn
+        Condition = {
+          StringEquals = {
+            "aws:RequestedRegion" = data.aws_region.current.region
+          }
+        }
+      },
+      {
+        Effect   = "Allow"
+        Action   = "bedrock:InvokeModel"
+        Resource = "arn:aws:bedrock:${data.aws_region.current.region}::foundation-model/${local.bedrock_chat_model_name}"
+        Condition = {
+          StringEquals = {
+            "aws:RequestedRegion"         = data.aws_region.current.region
+            "bedrock:InferenceProfileArn" = local.bedrock_chat_inference_profile_arn
+          }
+        }
+      },
+      {
+        Effect   = "Allow"
+        Action   = "bedrock:InvokeModel"
+        Resource = "arn:aws:bedrock:::foundation-model/${local.bedrock_chat_model_name}"
+        Condition = {
+          StringEquals = {
+            "aws:RequestedRegion"         = "unspecified"
+            "bedrock:InferenceProfileArn" = local.bedrock_chat_inference_profile_arn
+          }
+        }
+      },
+      {
+        Effect   = "Allow"
+        Action   = "bedrock:InvokeModel"
+        Resource = "arn:aws:bedrock:${data.aws_region.current.region}::foundation-model/${var.embedding_model_name}"
+      },
       {
         Effect   = "Allow"
         Resource = ["*"]
@@ -179,15 +275,8 @@ resource "aws_iam_role_policy" "my_jarvis_alexa_skill_handler_role_policy" {
         ]
       },
       {
-        # User-memory DynamoDB vector table. There is no Terraform resource for
-        # a DynamoDB vector table, so the Lambda creates it on first use via
-        # createTableIfNotExists(true) — hence CreateTable/DescribeTable here in
-        # addition to the data-plane actions. Scoped to the table and its
-        # indexes only.
         Effect = "Allow"
         Action = [
-          "dynamodb:CreateTable",
-          "dynamodb:DescribeTable",
           "dynamodb:BatchWriteItem",
           "dynamodb:Scan",
           "dynamodb:SearchVectors"
@@ -230,7 +319,8 @@ resource "aws_lambda_function" "my_jarvis_alexa_skill_handler" {
     aws_s3_object.my_jarvis_skill_handler_lambda_jar,
     aws_s3vectors_index.my_jarvis_alexa_skill_handler_knowledge_base_index,
     aws_dynamodb_table.my_jarvis_alexa_skill_handler_users,
-    aws_dynamodb_table.my_jarvis_alexa_skill_handler_session_memory
+    aws_dynamodb_table.my_jarvis_alexa_skill_handler_session_memory,
+    null_resource.my_jarvis_alexa_skill_handler_user_memories
   ]
   function_name    = "${var.application_prefix}-function"
   description      = "Backend function for the My Jarvis Alexa Skill"
@@ -244,16 +334,15 @@ resource "aws_lambda_function" "my_jarvis_alexa_skill_handler" {
   timeout          = 60
   environment {
     variables = {
-      OPENAI_API_KEY             = var.openai_api_key
-      OPENAI_MODEL_NAME          = var.openai_model_name
-      OPENAI_CHAT_TEMPERATURE    = var.openai_chat_temperature
-      OPENAI_CHAT_MAX_TOKENS     = var.openai_chat_max_tokens
+      BEDROCK_CHAT_MODEL_ID      = var.bedrock_chat_model_id
+      BEDROCK_CHAT_MAX_TOKENS    = var.bedrock_chat_max_tokens
       COHERE_API_KEY             = var.cohere_api_key
       COHERE_MODEL_NAME          = var.cohere_model_name
       KNOWLEDGE_BASE_BUCKET_NAME = local.knowledge_base_bucket_name
       S3_VECTORS_BUCKET_NAME     = aws_s3vectors_vector_bucket.my_jarvis_alexa_skill_handler_knowledge_base_vectors.vector_bucket_name
       S3_VECTORS_INDEX_NAME      = aws_s3vectors_index.my_jarvis_alexa_skill_handler_knowledge_base_index.index_name
       EMBEDDING_MODEL_NAME       = var.embedding_model_name
+      EMBEDDING_DIMENSIONS       = var.embedding_dimensions
 
       DYNAMODB_USER_MEMORY_TABLE_NAME = var.dynamodb_user_memory_table_name
       DYNAMODB_USER_MEMORY_INDEX_NAME = var.dynamodb_user_memory_index_name
@@ -261,6 +350,7 @@ resource "aws_lambda_function" "my_jarvis_alexa_skill_handler" {
       DYNAMODB_USERS_TABLE_NAME          = aws_dynamodb_table.my_jarvis_alexa_skill_handler_users.name
       DYNAMODB_SESSION_MEMORY_TABLE_NAME = aws_dynamodb_table.my_jarvis_alexa_skill_handler_session_memory.name
       SESSION_MEMORY_TTL_MINUTES         = var.session_memory_ttl_minutes
+      SESSION_MEMORY_MAX_MESSAGES        = var.session_memory_max_messages
     }
   }
 }

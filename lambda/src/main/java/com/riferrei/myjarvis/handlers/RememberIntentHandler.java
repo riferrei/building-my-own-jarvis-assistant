@@ -35,14 +35,6 @@ public class RememberIntentHandler implements RequestHandler {
         will provide, which will be given to you via prompt. Use the tools available to create
         the user memory.
         
-        IMPORTANT: When calling createUserMemory, use EXACTLY these values:
-        - sessionId: Use the sessionId value provided in the context (starts with "amzn1.ask.session")
-        - userId: Use the userId value provided in the context (starts with "amzn1.ask.person")
-        - timezone: Use the timezone value provided in the context (e.g., "America/New_York")
-        - memory: The actual memory text the user wants to store
-        
-        DO NOT mix up these parameters or use generated timestamps for userId!
-        
         CRITICAL: Call setUserTimeZone("%s") first, then getCurrentDateTime()
         
         Also, make sure to:
@@ -176,24 +168,13 @@ public class RememberIntentHandler implements RequestHandler {
     private Optional<AnswerResponse> processWithAI(RequestContext requestContext,
                                                    String memory) {
         try {
-            String question = String.format("""
-            User asked to store this memory: %s
-            - sessionId: %s
-            - userId: %s
-            - timezone: %s
-            """,
-                    memory,
-                    requestContext.sessionId(),
-                    requestContext.userId(),
-                    requestContext.timezone()
-            );
+            var question = String.format("User asked to store this memory: %s", memory);
 
             var systemPrompt = String.format(SYSTEM_PROMPT, requestContext.timezone());
 
-            var response = chatAssistantService.processQueryWithContext(
+            var response = chatAssistantService.processQueryWithoutContext(
                     systemPrompt,
                     requestContext.userId(),
-                    requestContext.userName(),
                     question
             );
 
@@ -241,11 +222,17 @@ public class RememberIntentHandler implements RequestHandler {
 
     private Optional<AnswerResponse> parseResponse(String responseAsJson) {
         try {
-            return Optional.ofNullable(objectMapper.readValue(responseAsJson, AnswerResponse.class));
+            return Optional.ofNullable(objectMapper.readValue(extractJsonObject(responseAsJson), AnswerResponse.class));
         } catch (Exception e) {
             logger.error("Failed to parse AI response: {}", responseAsJson, e);
             return Optional.empty();
         }
+    }
+
+    private String extractJsonObject(String response) {
+        var start = response.indexOf('{');
+        var end = response.lastIndexOf('}');
+        return (start >= 0 && end > start) ? response.substring(start, end + 1) : response;
     }
 
     private record AnswerResponse(

@@ -1,6 +1,7 @@
 package com.riferrei.myjarvis.services;
 
 import dev.langchain4j.data.segment.TextSegment;
+import dev.langchain4j.invocation.InvocationParameters;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.embedding.EmbeddingModel;
@@ -9,12 +10,12 @@ import dev.langchain4j.model.scoring.ScoringModel;
 import dev.langchain4j.rag.DefaultRetrievalAugmentor;
 import dev.langchain4j.rag.RetrievalAugmentor;
 import dev.langchain4j.rag.content.aggregator.ContentAggregator;
-import dev.langchain4j.rag.content.aggregator.ReRankingContentAggregator;
 import dev.langchain4j.rag.content.injector.ContentInjector;
 import dev.langchain4j.rag.content.injector.DefaultContentInjector;
 import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
-import dev.langchain4j.rag.query.router.LanguageModelQueryRouter;
+import dev.langchain4j.rag.query.router.DefaultQueryRouter;
+import dev.langchain4j.rag.query.router.QueryRouter;
 import dev.langchain4j.rag.query.transformer.CompressingQueryTransformer;
 import dev.langchain4j.rag.query.transformer.QueryTransformer;
 import dev.langchain4j.service.AiServices;
@@ -22,14 +23,14 @@ import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.filter.MetadataFilterBuilder;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
-import com.riferrei.myjarvis.extensions.WorkingMemoryChat;
-import com.riferrei.myjarvis.extensions.WorkingMemoryStore;
+import com.riferrei.myjarvis.extensions.RelevanceContentAggregator;
+import com.riferrei.myjarvis.extensions.SessionChatMemory;
+import com.riferrei.myjarvis.extensions.SessionMemoryStore;
 import com.riferrei.myjarvis.helpers.OwnerId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
-import java.util.Map;
 
 import static com.riferrei.myjarvis.helpers.Constants.*;
 
@@ -61,7 +62,9 @@ public class ChatAssistantService {
         this.tools = tools;
     }
 
-    public String processQueryWithoutContext(String systemPrompt, String query) {
+    public String processQueryWithoutContext(String systemPrompt,
+                                             String userId,
+                                             String query) {
         logger.debug("Processing query without context {}", query);
 
         BasicChatAssistant basicChatAssistant =
@@ -70,7 +73,7 @@ public class ChatAssistantService {
                         .tools(tools)
                         .build();
 
-        return basicChatAssistant.chat(systemPrompt, query);
+        return basicChatAssistant.chat(systemPrompt, query, toolParameters(userId));
     }
 
     public String processQueryWithContext(String systemPrompt,
@@ -86,29 +89,26 @@ public class ChatAssistantService {
                         .chatModel(chatModel)
                         .chatMemory(getChatMemory(userId))
                         .retrievalAugmentor(augmentor)
+                        .storeRetrievedContentInChatMemory(false)
                         .tools(tools)
                         .build();
 
-        return contextualChatAssistant.chat(systemPrompt, userId, userName, query);
+        return contextualChatAssistant.chat(systemPrompt, userId, userName, query, toolParameters(userId));
+    }
+
+    private InvocationParameters toolParameters(String userId) {
+        return InvocationParameters.from(USER_ID_PARAM, userId);
     }
 
     private RetrievalAugmentor createRetrievalAugmentor(String userId) {
-        Map<ContentRetriever, String> retrievers = Map.of(
-                getLongTermMemories(userId), "User specific memories like preferences, events, and interactions",
-                getGeneralKnowledgeBase(), "General knowledge base (not really user related) with facts and data"
-        );
-
         // Compress the user's query and the preceding conversation into a single query.
         // This should significantly improve the quality of the retrieval process.
         QueryTransformer queryTransformer = new CompressingQueryTransformer(chatModel);
 
-        // This router make sure to only query the retrievers that are relevant
-        // to the user query. This is more efficient in terms of context size
-        LanguageModelQueryRouter router = LanguageModelQueryRouter.builder()
-                .chatModel(chatModel)
-                .retrieverToDescription(retrievers)
-                .fallbackStrategy(LanguageModelQueryRouter.FallbackStrategy.ROUTE_TO_ALL)
-                .build();
+        QueryRouter router = new DefaultQueryRouter(
+                getLongTermMemories(userId),
+                getGeneralKnowledgeBase()
+        );
 
         // Creates the precise context injection prompt the LLM will use
         // to resonate over and produce the appropriate answer. The LLM
@@ -121,9 +121,9 @@ public class ChatAssistantService {
 
         // Once the contents are retrieved, we need to aggregate them into
         // a content list that is coherent and relevant to the user's query.
-        ContentAggregator contentAggregator = ReRankingContentAggregator.builder()
+        ContentAggregator contentAggregator = RelevanceContentAggregator.builder()
                 .scoringModel(scoringModel)
-                .minScore(0.8)
+                .minScore(0.5)
                 .build();
 
         return DefaultRetrievalAugmentor.builder()
@@ -135,16 +135,17 @@ public class ChatAssistantService {
     }
 
     private ChatMemory getChatMemory(String userId) {
-        ChatMemoryStore chatMemoryStore = WorkingMemoryStore.builder()
+        ChatMemoryStore sessionMemoryStore = SessionMemoryStore.builder()
                 .dynamoDbClient(dynamoDbClient)
                 .tableName(DYNAMODB_SESSION_MEMORY_TABLE_NAME)
                 .ttlMinutes(Integer.parseInt(SESSION_MEMORY_TTL_MINUTES))
-                .maxContextWindow(Integer.parseInt(OPENAI_CHAT_MAX_TOKENS))
+                .maxContextWindow(Integer.parseInt(SESSION_MEMORY_MAX_MESSAGES))
+                .storeAiMessages(true)
                 .build();
 
-        return WorkingMemoryChat.builder()
+        return SessionChatMemory.builder()
                 .id(userId)
-                .chatMemoryStore(chatMemoryStore)
+                .chatMemoryStore(sessionMemoryStore)
                 .build();
     }
 

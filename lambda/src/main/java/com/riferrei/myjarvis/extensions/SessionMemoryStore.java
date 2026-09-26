@@ -21,9 +21,9 @@ import java.util.UUID;
 
 import static com.riferrei.myjarvis.helpers.MessageHelper.messageContent;
 
-public class WorkingMemoryStore implements ChatMemoryStore {
+public class SessionMemoryStore implements ChatMemoryStore {
 
-    private static final Logger logger = LoggerFactory.getLogger(WorkingMemoryStore.class);
+    private static final Logger logger = LoggerFactory.getLogger(SessionMemoryStore.class);
 
     private static final String SESSION_ID_ATTRIBUTE = "sessionId";
     private static final String EVENT_ID_ATTRIBUTE = "eventId";
@@ -94,12 +94,16 @@ public class WorkingMemoryStore implements ChatMemoryStore {
             }
         }
 
-        var trimmed = chatMessages.size() > maxContextWindow
+        var trimmed = new ArrayList<>(chatMessages.size() > maxContextWindow
                 ? chatMessages.subList(chatMessages.size() - maxContextWindow, chatMessages.size())
-                : chatMessages;
+                : chatMessages);
+
+        while (!trimmed.isEmpty() && trimmed.getFirst() instanceof AiMessage) {
+            trimmed.removeFirst();
+        }
 
         lastFetchedCount = trimmed.size();
-        return new ArrayList<>(trimmed);
+        return trimmed;
     }
 
     @Override
@@ -308,11 +312,11 @@ public class WorkingMemoryStore implements ChatMemoryStore {
             return this;
         }
 
-        public WorkingMemoryStore build() {
+        public SessionMemoryStore build() {
             Objects.requireNonNull(dynamoDbClient, "dynamoDbClient is required");
             Objects.requireNonNull(tableName, "tableName is required");
             Objects.requireNonNull(ttlMinutes, "ttlMinutes is required");
-            var store = new WorkingMemoryStore();
+            var store = new SessionMemoryStore();
             store.dynamoDbClient = this.dynamoDbClient;
             store.tableName = this.tableName;
             store.ttlMinutes = this.ttlMinutes;
