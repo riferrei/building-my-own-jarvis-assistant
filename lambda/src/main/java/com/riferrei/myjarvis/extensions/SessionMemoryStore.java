@@ -34,7 +34,6 @@ public class SessionMemoryStore implements ChatMemoryStore {
     private static final String EXPIRES_AT_ATTRIBUTE = "expiresAt";
 
     private static final String EVENT_ID_FORMAT = "%019d#%s";
-
     private static final int BATCH_WRITE_MAX = 25;
 
     private DynamoDbClient dynamoDbClient;
@@ -43,7 +42,6 @@ public class SessionMemoryStore implements ChatMemoryStore {
     private boolean storeSystemMessages = false;
     private boolean storeAiMessages = false;
     private boolean storeToolMessages = false;
-    private int maxContextWindow = 1000;
 
     private int lastFetchedCount = 0;
 
@@ -94,16 +92,8 @@ public class SessionMemoryStore implements ChatMemoryStore {
             }
         }
 
-        var trimmed = new ArrayList<>(chatMessages.size() > maxContextWindow
-                ? chatMessages.subList(chatMessages.size() - maxContextWindow, chatMessages.size())
-                : chatMessages);
-
-        while (!trimmed.isEmpty() && trimmed.getFirst() instanceof AiMessage) {
-            trimmed.removeFirst();
-        }
-
-        lastFetchedCount = trimmed.size();
-        return trimmed;
+        lastFetchedCount = chatMessages.size();
+        return chatMessages;
     }
 
     @Override
@@ -261,9 +251,6 @@ public class SessionMemoryStore implements ChatMemoryStore {
     public boolean isStoreToolMessages() { return storeToolMessages; }
     public void setStoreToolMessages(boolean v) { this.storeToolMessages = v; }
 
-    public int getMaxContextWindow() { return maxContextWindow; }
-    public void setMaxContextWindow(int v) { this.maxContextWindow = v; }
-
     public static Builder builder() {
         return new Builder();
     }
@@ -275,7 +262,6 @@ public class SessionMemoryStore implements ChatMemoryStore {
         private Optional<Boolean> storeSystemMessages = Optional.empty();
         private Optional<Boolean> storeAiMessages = Optional.empty();
         private Optional<Boolean> storeToolMessages = Optional.empty();
-        private Optional<Integer> maxContextWindow = Optional.empty();
 
         public Builder dynamoDbClient(DynamoDbClient value) {
             this.dynamoDbClient = value;
@@ -307,11 +293,6 @@ public class SessionMemoryStore implements ChatMemoryStore {
             return this;
         }
 
-        public Builder maxContextWindow(int value) {
-            this.maxContextWindow = Optional.of(value);
-            return this;
-        }
-
         public SessionMemoryStore build() {
             Objects.requireNonNull(dynamoDbClient, "dynamoDbClient is required");
             Objects.requireNonNull(tableName, "tableName is required");
@@ -323,7 +304,6 @@ public class SessionMemoryStore implements ChatMemoryStore {
             storeSystemMessages.ifPresent(store::setStoreSystemMessages);
             storeAiMessages.ifPresent(store::setStoreAiMessages);
             storeToolMessages.ifPresent(store::setStoreToolMessages);
-            maxContextWindow.ifPresent(store::setMaxContextWindow);
             return store;
         }
     }

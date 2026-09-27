@@ -6,6 +6,7 @@ This project demonstrates how to create a [J.A.R.V.I.S](https://en.wikipedia.org
 ## Table of Contents
 - [Setup](#setup)
 - [Testing the Assistant](#testing-the-assistant)
+- [Cleaning Up Data](#cleaning-up-data)
 - [Architecture](#architecture)
 - [Known Issues](#known-issues)
 - [Resources](#resources)
@@ -105,6 +106,54 @@ To remove all deployed resources:
 ```sh
 ./undeploy.sh
 ```
+
+## Cleaning Up Data
+
+To start testing with a clean slate, erase the data the assistant has stored while keeping every resource deployed. Set the variables below to the values in your `infrastructure/terraform.tfvars`. The commands use the same AWS CLI credentials and region as Terraform.
+
+```sh
+USERS_TABLE="<dynamodb_users_table_name>"
+SESSION_MEMORY_TABLE="<dynamodb_session_memory_table_name>"
+USER_MEMORY_TABLE="<dynamodb_user_memory_table_name>"
+VECTOR_BUCKET="<s3_vectors_bucket_name>"
+VECTOR_INDEX="<s3_vectors_index_name>"
+```
+
+Erase the user records from the DynamoDB users table:
+```sh
+aws dynamodb scan --table-name "$USERS_TABLE" --projection-expression userId --query 'Items[].userId.S' --output text | tr '\t' '\n' | while read -r id; do
+  aws dynamodb delete-item --table-name "$USERS_TABLE" --key "{\"userId\":{\"S\":\"$id\"}}"
+done
+```
+
+Erase the short-term chat transcripts from the DynamoDB session-memory table:
+```sh
+aws dynamodb scan --table-name "$SESSION_MEMORY_TABLE" --projection-expression 'sessionId, eventId' --query 'Items[].[sessionId.S, eventId.S]' --output text | while read -r sid eid; do
+  aws dynamodb delete-item --table-name "$SESSION_MEMORY_TABLE" --key "{\"sessionId\":{\"S\":\"$sid\"},\"eventId\":{\"S\":\"$eid\"}}"
+done
+```
+
+Erase the long-term user memories from the DynamoDB vector table:
+```sh
+aws dynamodb scan --table-name "$USER_MEMORY_TABLE" --projection-expression id --query 'Items[].id.S' --output text | tr '\t' '\n' | while read -r id; do
+  aws dynamodb delete-item --table-name "$USER_MEMORY_TABLE" --key "{\"id\":{\"S\":\"$id\"}}"
+done
+```
+
+Erase the knowledge base embeddings from the S3 Vectors index:
+```sh
+aws s3vectors list-vectors --vector-bucket-name "$VECTOR_BUCKET" --index-name "$VECTOR_INDEX" --query 'vectors[].key' --output text | tr '\t' '\n' | xargs -r -n 500 aws s3vectors delete-vectors --vector-bucket-name "$VECTOR_BUCKET" --index-name "$VECTOR_INDEX" --keys
+```
+
+Verify that every store is empty. Each command should print `0`:
+```sh
+for table in "$USERS_TABLE" "$SESSION_MEMORY_TABLE" "$USER_MEMORY_TABLE"; do
+  aws dynamodb scan --table-name "$table" --select COUNT --query Count --output text
+done
+aws s3vectors list-vectors --vector-bucket-name "$VECTOR_BUCKET" --index-name "$VECTOR_INDEX" --query 'length(vectors)' --output text
+```
+
+On the next request, the assistant creates your user record again from your Alexa profile. The source documents of the knowledge base remain in the `processed/` folder of the knowledge base bucket; to embed them again, move them back to the `ingest/` folder.
 
 ## Architecture
 ![Software Architecture](./images/software-architecture.png)

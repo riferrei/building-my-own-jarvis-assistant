@@ -8,19 +8,23 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
-public class SessionChatMemory implements ChatMemory {
+public class SessionMemoryChat implements ChatMemory {
 
-    private static final Logger logger = LoggerFactory.getLogger(SessionChatMemory.class);
+    private static final Logger logger = LoggerFactory.getLogger(SessionMemoryChat.class);
 
     private final String id;
     private final ChatMemoryStore chatMemoryStore;
+    private final int maxMessages;
     private final List<ChatMessage> messages;
 
-    public SessionChatMemory(String id,
-                             ChatMemoryStore chatMemoryStore) {
+    public SessionMemoryChat(String id,
+                             ChatMemoryStore chatMemoryStore,
+                             int maxMessages) {
         this.id = id;
         this.chatMemoryStore = chatMemoryStore;
+        this.maxMessages = maxMessages;
 
         // Load existing messages
         this.messages = new ArrayList<>(chatMemoryStore.getMessages(id));
@@ -41,7 +45,19 @@ public class SessionChatMemory implements ChatMemory {
 
     @Override
     public List<ChatMessage> messages() {
-        return messages;
+        var conversation = messages.stream()
+                .filter(message -> !(message instanceof SystemMessage))
+                .toList();
+
+        var window = new ArrayList<>(conversation.subList(
+                Math.max(0, conversation.size() - maxMessages), conversation.size()));
+
+        while (!window.isEmpty() && !(window.getFirst() instanceof UserMessage)) {
+            window.removeFirst();
+        }
+
+        SystemMessage.findFirst(messages).ifPresent(window::addFirst);
+        return window;
     }
 
     @Override
@@ -57,6 +73,7 @@ public class SessionChatMemory implements ChatMemory {
     public static class Builder {
         private String id;
         private ChatMemoryStore chatMemoryStore;
+        private Integer maxMessages;
 
         public Builder id(String id) {
             this.id = id;
@@ -68,8 +85,14 @@ public class SessionChatMemory implements ChatMemory {
             return this;
         }
 
-        public SessionChatMemory build() {
-            return new SessionChatMemory(id, chatMemoryStore);
+        public Builder maxMessages(int maxMessages) {
+            this.maxMessages = maxMessages;
+            return this;
+        }
+
+        public SessionMemoryChat build() {
+            Objects.requireNonNull(maxMessages, "maxMessages is required");
+            return new SessionMemoryChat(id, chatMemoryStore, maxMessages);
         }
     }
 }

@@ -91,8 +91,10 @@ multiple, optional, or validated parameters.
 
 Custom SPI implementations (e.g. `SessionMemoryStore implements ChatMemoryStore`)
 go in `extensions/`, are built via the builder pattern, and encapsulate their own
-quirks (message-role filtering, context-window trimming, delta-only writes).
+quirks (message-role filtering, delta-only writes).
 Keep this backend-specific logic inside the extension, out of handlers/services.
+A `ChatMemoryStore` only persists and loads messages; eviction (trimming to a
+context window) is the `ChatMemory`'s responsibility, never the store's.
 
 ---
 

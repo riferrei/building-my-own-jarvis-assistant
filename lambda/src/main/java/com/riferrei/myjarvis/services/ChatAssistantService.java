@@ -24,7 +24,7 @@ import dev.langchain4j.store.embedding.filter.MetadataFilterBuilder;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import com.riferrei.myjarvis.extensions.RelevanceContentAggregator;
-import com.riferrei.myjarvis.extensions.SessionChatMemory;
+import com.riferrei.myjarvis.extensions.SessionMemoryChat;
 import com.riferrei.myjarvis.extensions.SessionMemoryStore;
 import com.riferrei.myjarvis.helpers.OwnerId;
 import org.slf4j.Logger;
@@ -82,13 +82,13 @@ public class ChatAssistantService {
                                           String query) {
         logger.debug("Processing query with context for user: {}", userId);
 
-        RetrievalAugmentor augmentor = createRetrievalAugmentor(userId);
+        RetrievalAugmentor retrievalAugmentor = createRetrievalAugmentor(userId);
 
         ContextualChatAssistant contextualChatAssistant =
                 AiServices.builder(ContextualChatAssistant.class)
                         .chatModel(chatModel)
                         .chatMemory(getChatMemory(userId))
-                        .retrievalAugmentor(augmentor)
+                        .retrievalAugmentor(retrievalAugmentor)
                         .storeRetrievedContentInChatMemory(false)
                         .tools(tools)
                         .build();
@@ -105,9 +105,12 @@ public class ChatAssistantService {
         // This should significantly improve the quality of the retrieval process.
         QueryTransformer queryTransformer = new CompressingQueryTransformer(chatModel);
 
-        QueryRouter router = new DefaultQueryRouter(
-                getLongTermMemories(userId),
-                getGeneralKnowledgeBase()
+        // Source of data for retrieval. The question will be asked against the user
+        // memories and the general knowledge base. The contentAggregator will be
+        // responsible for scoring and aggregating the relevant content.
+        QueryRouter queryRouter = new DefaultQueryRouter(
+                getUserMemories(userId),
+                getKnowledgeBase()
         );
 
         // Creates the precise context injection prompt the LLM will use
@@ -127,8 +130,8 @@ public class ChatAssistantService {
                 .build();
 
         return DefaultRetrievalAugmentor.builder()
-                .queryRouter(router)
                 .queryTransformer(queryTransformer)
+                .queryRouter(queryRouter)
                 .contentInjector(contentInjector)
                 .contentAggregator(contentAggregator)
                 .build();
@@ -139,17 +142,17 @@ public class ChatAssistantService {
                 .dynamoDbClient(dynamoDbClient)
                 .tableName(DYNAMODB_SESSION_MEMORY_TABLE_NAME)
                 .ttlMinutes(Integer.parseInt(SESSION_MEMORY_TTL_MINUTES))
-                .maxContextWindow(Integer.parseInt(SESSION_MEMORY_MAX_MESSAGES))
                 .storeAiMessages(true)
                 .build();
 
-        return SessionChatMemory.builder()
+        return SessionMemoryChat.builder()
                 .id(userId)
                 .chatMemoryStore(sessionMemoryStore)
+                .maxMessages(Integer.parseInt(SESSION_MEMORY_MAX_MESSAGES))
                 .build();
     }
 
-    private ContentRetriever getLongTermMemories(String userId) {
+    private ContentRetriever getUserMemories(String userId) {
         return EmbeddingStoreContentRetriever.builder()
                 .embeddingStore(userMemoryStore)
                 .embeddingModel(embeddingModel)
@@ -159,7 +162,7 @@ public class ChatAssistantService {
                 .build();
     }
 
-    private ContentRetriever getGeneralKnowledgeBase() {
+    private ContentRetriever getKnowledgeBase() {
         return EmbeddingStoreContentRetriever.builder()
                 .embeddingStore(knowledgeBaseStore)
                 .embeddingModel(embeddingModel)
