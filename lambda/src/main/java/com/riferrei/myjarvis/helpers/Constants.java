@@ -19,13 +19,23 @@ public enum Constants {
     public static final String OWNER_ID_METADATA_KEY = "ownerId";
     public static final String USER_ID_PARAM = "userId";
     public static final String USER_NAME_PARAM = "userName";
+    public static final String TIME_ZONE_PARAM = "timeZone";
     public static final String MEMORY_PARAM = "memory";
     public static final String QUERY_PARAM = "query";
 
     public static final String BEDROCK_CHAT_MODEL_ID = System.getenv("BEDROCK_CHAT_MODEL_ID");
     public static final String BEDROCK_CHAT_MAX_TOKENS = System.getenv("BEDROCK_CHAT_MAX_TOKENS");
-    public static final String COHERE_API_KEY = System.getenv("COHERE_API_KEY");
-    public static final String COHERE_MODEL_NAME = System.getenv("COHERE_MODEL_NAME");
+
+    public static final String BEDROCK_RERANK_MODEL_ID =
+            (System.getenv("BEDROCK_RERANK_MODEL_ID") == null ||
+                    System.getenv("BEDROCK_RERANK_MODEL_ID").isEmpty())
+                    ? "cohere.rerank-v3-5:0" : System.getenv("BEDROCK_RERANK_MODEL_ID");
+
+    public static final String BEDROCK_RERANK_REGION =
+            (System.getenv("BEDROCK_RERANK_REGION") == null ||
+                    System.getenv("BEDROCK_RERANK_REGION").isEmpty())
+                    ? System.getenv("AWS_REGION") : System.getenv("BEDROCK_RERANK_REGION");
+
     public static final String KNOWLEDGE_BASE_BUCKET_NAME = System.getenv("KNOWLEDGE_BASE_BUCKET_NAME");
 
     public static final String S3_VECTORS_BUCKET_NAME = System.getenv("S3_VECTORS_BUCKET_NAME");

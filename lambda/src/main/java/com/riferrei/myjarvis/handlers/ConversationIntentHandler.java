@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import java.util.Optional;
 
 import static com.riferrei.myjarvis.helpers.Constants.*;
+import static com.riferrei.myjarvis.helpers.HandlerHelper.currentDateTime;
 import static com.riferrei.myjarvis.helpers.HandlerHelper.extractRequestContext;
 
 public class ConversationIntentHandler implements RequestHandler {
@@ -21,7 +22,7 @@ public class ConversationIntentHandler implements RequestHandler {
     private static final Logger logger = LoggerFactory.getLogger(ConversationIntentHandler.class);
 
     private final static String SYSTEM_PROMPT = """
-        CRITICAL: Call setUserTimeZone("%s") first, then getCurrentDateTime()
+        The user's timezone is %s, and the current date and time there is %s.
         
         You are an AI assistant that should act, talk, and behave as if you were J.A.R.V.I.S AI
         from the Iron Man movies. Be formal but friendly, and add personality. You are going to
@@ -136,12 +137,14 @@ public class ConversationIntentHandler implements RequestHandler {
             logger.info("Processing conversation for user: {} with query: {}",
                     requestContext.userId(), query);
 
-            var systemPrompt = String.format(SYSTEM_PROMPT, requestContext.timezone());
+            var systemPrompt = String.format(SYSTEM_PROMPT,
+                    requestContext.timezone(), currentDateTime(requestContext.timezone()));
 
             var response = chatAssistantService.processQueryWithContext(
                     systemPrompt,
                     requestContext.userId(),
                     requestContext.userName(),
+                    requestContext.timezone(),
                     query
             );
 

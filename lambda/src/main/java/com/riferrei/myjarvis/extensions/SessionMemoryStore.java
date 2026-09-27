@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static com.riferrei.myjarvis.helpers.MessageHelper.messageContent;
 
@@ -136,6 +137,7 @@ public class SessionMemoryStore implements ChatMemoryStore {
 
     private List<SessionEvent> fetchSessionEvents(String sanitizedSessionId) {
         var nowMillis = System.currentTimeMillis();
+        long start = System.nanoTime();
 
         try {
             var response = dynamoDbClient.query(builder -> builder
@@ -154,6 +156,7 @@ public class SessionMemoryStore implements ChatMemoryStore {
                 }
                 events.add(new SessionEvent(attr(item.get(ROLE_ATTRIBUTE)), attr(item.get(TEXT_ATTRIBUTE))));
             }
+            logger.info("Loaded {} session events in {} ms", events.size(), elapsedMillis(start));
             return events;
         } catch (Exception ex) {
             logger.error("Error fetching session memory for: {}", sanitizedSessionId, ex);
@@ -168,6 +171,7 @@ public class SessionMemoryStore implements ChatMemoryStore {
                                  long createdAt) {
         var expiresAt = createdAt / 1000L + (long) ttlMinutes * 60L;
         var eventId = String.format(EVENT_ID_FORMAT, createdAt, UUID.randomUUID());
+        long start = System.nanoTime();
 
         try {
             dynamoDbClient.putItem(builder -> builder
@@ -182,7 +186,7 @@ public class SessionMemoryStore implements ChatMemoryStore {
                             EXPIRES_AT_ATTRIBUTE, AttributeValue.fromN(Long.toString(expiresAt))
                     ))
             );
-            logger.debug("Session event added for: {}", sanitizedSessionId);
+            logger.info("Saved {} session event in {} ms", role, elapsedMillis(start));
         } catch (Exception ex) {
             logger.error("Error adding session event for: {}", sanitizedSessionId, ex);
         }
@@ -225,6 +229,10 @@ public class SessionMemoryStore implements ChatMemoryStore {
         } catch (Exception ex) {
             logger.error("Error deleting session memory for: {}", sanitizedSessionId, ex);
         }
+    }
+
+    private static long elapsedMillis(long start) {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
     }
 
     private static String attr(AttributeValue value) {

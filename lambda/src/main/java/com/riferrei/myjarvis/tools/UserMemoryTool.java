@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static com.riferrei.myjarvis.helpers.Constants.OWNER_ID_METADATA_KEY;
 import static com.riferrei.myjarvis.helpers.Constants.USER_ID_PARAM;
@@ -35,6 +36,7 @@ public class UserMemoryTool {
         String userId = invocationParameters.get(USER_ID_PARAM);
         logger.info("Creating a new memory for the user: userId={}, memory={}", userId, memory);
 
+        long start = System.nanoTime();
         try {
             var textSegment = TextSegment.from(memory, Metadata.from(Map.of(
                     OWNER_ID_METADATA_KEY, OwnerId.sanitize(userId)
@@ -42,6 +44,8 @@ public class UserMemoryTool {
 
             var embedding = embeddingModel.embed(textSegment).content();
             userMemoryStore.add(embedding, textSegment);
+            logger.info("Created a new memory for the user in {} ms",
+                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
             return true;
         } catch (Exception ex) {
             logger.error("Error saving user memory for user: {}", userId, ex);

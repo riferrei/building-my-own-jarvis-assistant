@@ -161,6 +161,7 @@ resource "null_resource" "my_jarvis_alexa_skill_handler_user_memories" {
 locals {
   bedrock_chat_model_name            = trimprefix(var.bedrock_chat_model_id, "global.")
   bedrock_chat_inference_profile_arn = "arn:aws:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:inference-profile/${var.bedrock_chat_model_id}"
+  bedrock_rerank_region              = coalesce(var.bedrock_rerank_region, data.aws_region.current.region)
 }
 
 resource "aws_iam_role" "my_jarvis_alexa_skill_handler_role" {
@@ -222,6 +223,21 @@ resource "aws_iam_role_policy" "my_jarvis_alexa_skill_handler_role_policy" {
         Effect   = "Allow"
         Action   = "bedrock:InvokeModel"
         Resource = "arn:aws:bedrock:${data.aws_region.current.region}::foundation-model/${var.embedding_model_name}"
+      },
+      {
+        Effect   = "Allow"
+        Action   = "bedrock:InvokeModel"
+        Resource = "arn:aws:bedrock:${local.bedrock_rerank_region}::foundation-model/${var.bedrock_rerank_model_id}"
+      },
+      {
+        Effect   = "Allow"
+        Action   = "bedrock:Rerank"
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "aws:RequestedRegion" = local.bedrock_rerank_region
+          }
+        }
       },
       {
         Effect   = "Allow"
@@ -330,14 +346,14 @@ resource "aws_lambda_function" "my_jarvis_alexa_skill_handler" {
   handler          = "com.riferrei.myjarvis.MyJarvisStreamHandler::handleRequest"
   role             = aws_iam_role.my_jarvis_alexa_skill_handler_role.arn
   runtime          = "java21"
-  memory_size      = 512
+  memory_size      = 2048
   timeout          = 60
   environment {
     variables = {
       BEDROCK_CHAT_MODEL_ID      = var.bedrock_chat_model_id
       BEDROCK_CHAT_MAX_TOKENS    = var.bedrock_chat_max_tokens
-      COHERE_API_KEY             = var.cohere_api_key
-      COHERE_MODEL_NAME          = var.cohere_model_name
+      BEDROCK_RERANK_MODEL_ID    = var.bedrock_rerank_model_id
+      BEDROCK_RERANK_REGION      = local.bedrock_rerank_region
       KNOWLEDGE_BASE_BUCKET_NAME = local.knowledge_base_bucket_name
       S3_VECTORS_BUCKET_NAME     = aws_s3vectors_vector_bucket.my_jarvis_alexa_skill_handler_knowledge_base_vectors.vector_bucket_name
       S3_VECTORS_INDEX_NAME      = aws_s3vectors_index.my_jarvis_alexa_skill_handler_knowledge_base_index.index_name

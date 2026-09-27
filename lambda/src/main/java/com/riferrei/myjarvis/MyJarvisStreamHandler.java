@@ -14,14 +14,16 @@ import dev.langchain4j.model.bedrock.BedrockChatModel;
 import dev.langchain4j.model.bedrock.BedrockChatRequestParameters;
 import dev.langchain4j.model.bedrock.BedrockTitanEmbeddingModel;
 import dev.langchain4j.model.chat.ChatModel;
-import dev.langchain4j.model.cohere.CohereScoringModel;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.model.scoring.ScoringModel;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.bedrockagentruntime.BedrockAgentRuntimeClient;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.VectorDistanceFunction;
 import software.amazon.awssdk.services.s3vectors.model.DistanceMetric;
+import com.riferrei.myjarvis.extensions.BedrockScoringModel;
+import com.riferrei.myjarvis.helpers.LatencyListener;
 import com.riferrei.myjarvis.handlers.*;
 import com.riferrei.myjarvis.helpers.UserDoesNotExistExceptionHandler;
 import com.riferrei.myjarvis.helpers.UserValidationInterceptor;
@@ -36,7 +38,6 @@ import static com.riferrei.myjarvis.helpers.Constants.*;
 
 public class MyJarvisStreamHandler extends SkillStreamHandler {
 
-    // LangChain4j components
     private static final DocumentParser documentParser = new ApachePdfBoxDocumentParser(true);
     private static final DocumentSplitter documentSplitter = new DocumentByParagraphSplitter(
             Integer.parseInt(MAX_SEGMENT_SIZE_IN_CHARS),
@@ -50,11 +51,16 @@ public class MyJarvisStreamHandler extends SkillStreamHandler {
                     .maxOutputTokens(Integer.parseInt(BEDROCK_CHAT_MAX_TOKENS))
                     .additionalModelRequestField("thinking", Map.of("type", "disabled"))
                     .build())
+            .listeners(new LatencyListener())
             .build();
 
-    private static final ScoringModel scoringModel = CohereScoringModel.builder()
-            .apiKey(COHERE_API_KEY)
-            .modelName(COHERE_MODEL_NAME)
+    private static final BedrockAgentRuntimeClient bedrockAgentRuntimeClient = BedrockAgentRuntimeClient.builder()
+            .region(Region.of(BEDROCK_RERANK_REGION))
+            .build();
+
+    private static final ScoringModel scoringModel = BedrockScoringModel.builder()
+            .bedrockAgentRuntimeClient(bedrockAgentRuntimeClient)
+            .modelId(BEDROCK_RERANK_MODEL_ID)
             .build();
 
     private static final EmbeddingModel embeddingModel = BedrockTitanEmbeddingModel.builder()
@@ -81,7 +87,6 @@ public class MyJarvisStreamHandler extends SkillStreamHandler {
             .createTableIfNotExists(false)
             .build();
 
-    // Service components
     private static final ReminderService reminderService = new ReminderService();
 
     private static final DynamoDbClient dynamoDbClient = DynamoDbClient.builder()
@@ -120,7 +125,8 @@ public class MyJarvisStreamHandler extends SkillStreamHandler {
                         new UserIntroIntentHandler(userService, chatAssistantService),
                         new RememberIntentHandler(chatAssistantService),
                         new ConversationIntentHandler(chatAssistantService),
-                        new KnowledgeBaseIntentHandler(documentParser, documentSplitter, embeddingModel, knowledgeBaseStore)
+                        new KnowledgeBaseIntentHandler(documentParser, documentSplitter,
+                                embeddingModel, knowledgeBaseStore)
                 )
                 .build();
     }

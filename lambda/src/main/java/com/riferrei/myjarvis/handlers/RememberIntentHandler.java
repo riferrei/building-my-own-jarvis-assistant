@@ -18,7 +18,9 @@ import java.util.List;
 import java.util.Optional;
 
 import static com.riferrei.myjarvis.helpers.Constants.*;
+import static com.riferrei.myjarvis.helpers.HandlerHelper.currentDateTime;
 import static com.riferrei.myjarvis.helpers.HandlerHelper.extractRequestContext;
+import static com.riferrei.myjarvis.helpers.HandlerHelper.upcomingDates;
 
 public class RememberIntentHandler implements RequestHandler {
 
@@ -35,7 +37,7 @@ public class RememberIntentHandler implements RequestHandler {
         will provide, which will be given to you via prompt. Use the tools available to create
         the user memory.
         
-        CRITICAL: Call setUserTimeZone("%s") first, then getCurrentDateTime()
+        The user's timezone is %s, and the current date and time there is %s.
         
         Also, make sure to:
         
@@ -48,12 +50,10 @@ public class RememberIntentHandler implements RequestHandler {
         7. Use gender-neutral language - avoid terms like 'sir' or 'madam'.
         
         IMPORTANT DATE CALCULATION:
-        When user says "Tuesday" or any weekday without "next":
-        - Find the NEXT occurrence of that day
-        - If today is Sunday (day 0) and user says "Tuesday" (day 2), that's in 2 days
-        - If today is Wednesday and user says "Tuesday", that's in 6 days (next week)
-        - Use the function getNextDayOfWeek("TUESDAY") to get the correct date
-        
+        The next seven days are: %s.
+        When the user mentions a weekday, with or without "next", use that weekday's date
+        from this list. Don't calculate weekday dates yourself.
+
         Analyze the memory for TWO things:
         1. Store confirmation message
         2. Whether it needs a reminder and its details
@@ -170,11 +170,14 @@ public class RememberIntentHandler implements RequestHandler {
         try {
             var question = String.format("User asked to store this memory: %s", memory);
 
-            var systemPrompt = String.format(SYSTEM_PROMPT, requestContext.timezone());
+            var systemPrompt = String.format(SYSTEM_PROMPT,
+                    requestContext.timezone(), currentDateTime(requestContext.timezone()),
+                    upcomingDates(requestContext.timezone()));
 
             var response = chatAssistantService.processQueryWithoutContext(
                     systemPrompt,
                     requestContext.userId(),
+                    requestContext.timezone(),
                     question
             );
 

@@ -15,6 +15,7 @@ import java.util.Optional;
 
 import static com.riferrei.myjarvis.helpers.Constants.*;
 import static com.riferrei.myjarvis.helpers.HandlerHelper.extractUserIdFromRequest;
+import static com.riferrei.myjarvis.helpers.HandlerHelper.getUserTimeZone;
 
 public class UserIntroIntentHandler implements RequestHandler {
 
@@ -76,7 +77,7 @@ public class UserIntroIntentHandler implements RequestHandler {
     private Optional<Response> handleExistingUser(HandlerInput handlerInput, String userId, String userName) {
         logger.info("Recognized existing user: {}", userName);
 
-        var speechText = generateExistingUserResponse(userId, userName);
+        var speechText = generateExistingUserResponse(userId, userName, getUserTimeZone(handlerInput));
         return buildResponse(handlerInput, speechText);
     }
 
@@ -89,7 +90,8 @@ public class UserIntroIntentHandler implements RequestHandler {
         }
 
         var savedSuccessfully = saveNewUser(userId, newUserName.get());
-        var speechText = generateNewUserResponse(userId, newUserName.get(), savedSuccessfully);
+        var speechText = generateNewUserResponse(userId, newUserName.get(), savedSuccessfully,
+                getUserTimeZone(handlerInput));
 
         return buildResponse(handlerInput, speechText);
     }
@@ -123,10 +125,10 @@ public class UserIntroIntentHandler implements RequestHandler {
         }
     }
 
-    private String generateExistingUserResponse(String userId, String userName) {
+    private String generateExistingUserResponse(String userId, String userName, String timeZone) {
         try {
             var prompt = String.format("I know you %s", userName);
-            var response = chatAssistantService.processQueryWithoutContext(SYSTEM_PROMPT, userId, prompt);
+            var response = chatAssistantService.processQueryWithoutContext(SYSTEM_PROMPT, userId, timeZone, prompt);
 
             if (response != null && !response.isBlank()) {
                 return response;
@@ -138,13 +140,14 @@ public class UserIntroIntentHandler implements RequestHandler {
         return String.format("Welcome back, %s! Good to have you here again.", userName);
     }
 
-    private String generateNewUserResponse(String userId, String userName, boolean savedSuccessfully) {
+    private String generateNewUserResponse(String userId, String userName, boolean savedSuccessfully,
+                                           String timeZone) {
         try {
             var prompt = savedSuccessfully
                     ? String.format("New user %s saved successfully", userName)
                     : String.format("Error saving new user %s", userName);
 
-            var response = chatAssistantService.processQueryWithoutContext(SYSTEM_PROMPT, userId, prompt);
+            var response = chatAssistantService.processQueryWithoutContext(SYSTEM_PROMPT, userId, timeZone, prompt);
 
             if (response != null && !response.isBlank()) {
                 return response;

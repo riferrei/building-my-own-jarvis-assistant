@@ -21,16 +21,16 @@ variable "bedrock_chat_max_tokens" {
   default     = 4096
 }
 
-variable "cohere_api_key" {
-  description = "Cohere API key"
+variable "bedrock_rerank_model_id" {
+  description = "Amazon Bedrock model ID of any re-ranking model supported by the Bedrock Rerank API, such as cohere.rerank-v3-5:0 or amazon.rerank-v1:0"
   type        = string
-  sensitive   = true
+  default     = "cohere.rerank-v3-5:0"
 }
 
-variable "cohere_model_name" {
-  description = "Model name for scoring model"
+variable "bedrock_rerank_region" {
+  description = "AWS Region where the Amazon Bedrock re-ranking model is invoked. Empty means the Region the Lambda is deployed to"
   type        = string
-  default     = "rerank-multilingual-v3.0"
+  default     = ""
 }
 
 variable "alexa_skill_id" {

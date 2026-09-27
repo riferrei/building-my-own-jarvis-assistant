@@ -31,6 +31,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static com.riferrei.myjarvis.helpers.Constants.*;
 
@@ -64,6 +65,7 @@ public class ChatAssistantService {
 
     public String processQueryWithoutContext(String systemPrompt,
                                              String userId,
+                                             String timeZone,
                                              String query) {
         logger.debug("Processing query without context {}", query);
 
@@ -73,14 +75,16 @@ public class ChatAssistantService {
                         .tools(tools)
                         .build();
 
-        return basicChatAssistant.chat(systemPrompt, query, toolParameters(userId));
+        return basicChatAssistant.chat(systemPrompt, query, toolParameters(userId, timeZone));
     }
 
     public String processQueryWithContext(String systemPrompt,
                                           String userId,
                                           String userName,
+                                          String timeZone,
                                           String query) {
         logger.debug("Processing query with context for user: {}", userId);
+        long start = System.nanoTime();
 
         RetrievalAugmentor retrievalAugmentor = createRetrievalAugmentor(userId);
 
@@ -93,24 +97,29 @@ public class ChatAssistantService {
                         .tools(tools)
                         .build();
 
-        return contextualChatAssistant.chat(systemPrompt, userId, userName, query, toolParameters(userId));
+        String answer = contextualChatAssistant.chat(systemPrompt, userId, userName, query, toolParameters(userId, timeZone));
+        logger.info("Processed query with context in {} ms", elapsedMillis(start));
+        return answer;
     }
 
-    private InvocationParameters toolParameters(String userId) {
-        return InvocationParameters.from(USER_ID_PARAM, userId);
+    private InvocationParameters toolParameters(String userId, String timeZone) {
+        var invocationParameters = new InvocationParameters();
+        invocationParameters.put(USER_ID_PARAM, userId);
+        invocationParameters.put(TIME_ZONE_PARAM, timeZone);
+        return invocationParameters;
     }
 
     private RetrievalAugmentor createRetrievalAugmentor(String userId) {
         // Compress the user's query and the preceding conversation into a single query.
         // This should significantly improve the quality of the retrieval process.
-        QueryTransformer queryTransformer = new CompressingQueryTransformer(chatModel);
+        QueryTransformer queryTransformer = timed(new CompressingQueryTransformer(chatModel));
 
         // Source of data for retrieval. The question will be asked against the user
         // memories and the general knowledge base. The contentAggregator will be
         // responsible for scoring and aggregating the relevant content.
         QueryRouter queryRouter = new DefaultQueryRouter(
-                getUserMemories(userId),
-                getKnowledgeBase()
+                timed("user memories", getUserMemories(userId)),
+                timed("knowledge base", getKnowledgeBase())
         );
 
         // Creates the precise context injection prompt the LLM will use
@@ -168,6 +177,28 @@ public class ChatAssistantService {
                 .embeddingModel(embeddingModel)
                 .maxResults(Integer.parseInt(KNOWLEDGE_BASE_SEARCH_LIMIT))
                 .build();
+    }
+
+    private static QueryTransformer timed(QueryTransformer queryTransformer) {
+        return query -> {
+            long start = System.nanoTime();
+            var queries = queryTransformer.transform(query);
+            logger.info("Transformed query in {} ms", elapsedMillis(start));
+            return queries;
+        };
+    }
+
+    private static ContentRetriever timed(String source, ContentRetriever contentRetriever) {
+        return query -> {
+            long start = System.nanoTime();
+            var contents = contentRetriever.retrieve(query);
+            logger.info("Retrieved {} contents from {} in {} ms", contents.size(), source, elapsedMillis(start));
+            return contents;
+        };
+    }
+
+    private static long elapsedMillis(long start) {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
     }
 
 }

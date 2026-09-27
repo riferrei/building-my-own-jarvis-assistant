@@ -7,13 +7,24 @@ import com.amazon.ask.model.services.ups.UpsServiceClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.riferrei.myjarvis.helpers.Constants.*;
 
 public class HandlerHelper {
 
     private static final Logger logger = LoggerFactory.getLogger(HandlerHelper.class);
+    private static final DateTimeFormatter CURRENT_DATE_TIME_FORMAT =
+            DateTimeFormatter.ofPattern("EEEE, yyyy-MM-dd'T'HH:mm:ss", Locale.ENGLISH);
+    private static final DateTimeFormatter UPCOMING_DATE_FORMAT =
+            DateTimeFormatter.ofPattern("EEEE yyyy-MM-dd", Locale.ENGLISH);
 
     public static String getUserTimeZone(HandlerInput handlerInput) {
         try {
@@ -38,6 +49,18 @@ public class HandlerHelper {
         }
 
         return "America/New_York";
+    }
+
+    public static String currentDateTime(String timeZone) {
+        return ZonedDateTime.now(ZoneId.of(timeZone)).format(CURRENT_DATE_TIME_FORMAT);
+    }
+
+    public static String upcomingDates(String timeZone) {
+        var today = LocalDate.now(ZoneId.of(timeZone));
+        return IntStream.rangeClosed(1, 7)
+                .mapToObj(today::plusDays)
+                .map(UPCOMING_DATE_FORMAT::format)
+                .collect(Collectors.joining(", "));
     }
 
     public static String extractUserIdFromRequest(HandlerInput handlerInput) {

@@ -1,7 +1,9 @@
 application_prefix = "my-jarvis"
 
 bedrock_chat_model_id = "global.anthropic.claude-sonnet-5"
-cohere_api_key        = "your-cohere-api-key"
+
+bedrock_rerank_model_id = "cohere.rerank-v3-5:0"
+bedrock_rerank_region   = ""
 
 knowledge_base_bucket_name = "my-jarvis-knowledge-base"
 
