@@ -158,6 +158,32 @@ resource "null_resource" "my_jarvis_alexa_skill_handler_user_memories" {
   }
 }
 
+resource "null_resource" "my_jarvis_alexa_skill_handler_user_memories_ttl" {
+  depends_on = [null_resource.my_jarvis_alexa_skill_handler_user_memories]
+  triggers = {
+    region     = data.aws_region.current.region
+    table_name = var.dynamodb_user_memory_table_name
+    table_id   = null_resource.my_jarvis_alexa_skill_handler_user_memories.id
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["bash", "-c"]
+    command     = <<-EOT
+      set -euo pipefail
+      STATUS=$(aws dynamodb describe-time-to-live --region "$REGION" --table-name "$TABLE_NAME" \
+        --query 'TimeToLiveDescription.TimeToLiveStatus' --output text)
+      if [ "$STATUS" != "ENABLED" ] && [ "$STATUS" != "ENABLING" ]; then
+        aws dynamodb update-time-to-live --region "$REGION" --table-name "$TABLE_NAME" \
+          --time-to-live-specification Enabled=true,AttributeName=expiresAt > /dev/null
+      fi
+    EOT
+    environment = {
+      REGION     = self.triggers.region
+      TABLE_NAME = self.triggers.table_name
+    }
+  }
+}
+
 locals {
   bedrock_chat_model_name            = trimprefix(var.bedrock_chat_model_id, "global.")
   bedrock_chat_inference_profile_arn = "arn:aws:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:inference-profile/${var.bedrock_chat_model_id}"

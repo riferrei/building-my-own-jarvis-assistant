@@ -29,7 +29,6 @@ import com.riferrei.myjarvis.helpers.UserDoesNotExistExceptionHandler;
 import com.riferrei.myjarvis.helpers.UserValidationInterceptor;
 import com.riferrei.myjarvis.services.*;
 import com.riferrei.myjarvis.tools.DateTimeTool;
-import com.riferrei.myjarvis.tools.UserMemoryTool;
 
 import java.util.List;
 import java.util.Map;
@@ -98,13 +97,14 @@ public class MyJarvisStreamHandler extends SkillStreamHandler {
             .tableName(DYNAMODB_USERS_TABLE_NAME)
             .build();
 
+    private static final UserMemoryService userMemoryService =
+            new UserMemoryService(embeddingModel, userMemoryStore);
+
     private static final ChatAssistantService chatAssistantService =
             new ChatAssistantService(
                     chatModel, scoringModel, dynamoDbClient,
                     embeddingModel, knowledgeBaseStore, userMemoryStore,
-                    List.of(
-                            new DateTimeTool(),
-                            new UserMemoryTool(embeddingModel, userMemoryStore))
+                    List.of(new DateTimeTool())
             );
 
     public MyJarvisStreamHandler() {
@@ -123,7 +123,7 @@ public class MyJarvisStreamHandler extends SkillStreamHandler {
                         new FallbackIntentHandler(),
                         new HelpIntentHandler(),
                         new UserIntroIntentHandler(userService, chatAssistantService),
-                        new RememberIntentHandler(chatAssistantService),
+                        new RememberIntentHandler(chatAssistantService, userMemoryService),
                         new ConversationIntentHandler(chatAssistantService),
                         new KnowledgeBaseIntentHandler(documentParser, documentSplitter,
                                 embeddingModel, knowledgeBaseStore)

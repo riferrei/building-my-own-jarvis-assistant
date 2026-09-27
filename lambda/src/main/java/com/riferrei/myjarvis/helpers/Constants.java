@@ -17,6 +17,7 @@ public enum Constants {
     public static final String AMAZON_FALLBACK_INTENT = "AMAZON.FallbackIntent";
 
     public static final String OWNER_ID_METADATA_KEY = "ownerId";
+    public static final String EXPIRES_AT_METADATA_KEY = "expiresAt";
     public static final String USER_ID_PARAM = "userId";
     public static final String USER_NAME_PARAM = "userName";
     public static final String TIME_ZONE_PARAM = "timeZone";

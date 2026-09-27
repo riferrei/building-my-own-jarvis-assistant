@@ -6,14 +6,18 @@ import com.amazon.ask.model.IntentRequest;
 import com.amazon.ask.model.Response;
 import com.amazon.ask.model.Slot;
 import com.amazon.ask.request.Predicates;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.riferrei.myjarvis.helpers.HandlerHelper;
 import com.riferrei.myjarvis.helpers.RequestContext;
 import com.riferrei.myjarvis.services.ChatAssistantService;
+import com.riferrei.myjarvis.services.UserMemoryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Optional;
 
@@ -34,8 +38,8 @@ public class RememberIntentHandler implements RequestHandler {
         the J.A.R.V.I.S personality.
         
         As for your specific instructions, The user will ask you to remember memories the user 
-        will provide, which will be given to you via prompt. Use the tools available to create
-        the user memory.
+        will provide, which will be given to you via prompt. Don't store the memory yourself:
+        return it in the JSON below, and it will be stored for you.
         
         The user's timezone is %s, and the current date and time there is %s.
         
@@ -54,25 +58,39 @@ public class RememberIntentHandler implements RequestHandler {
         When the user mentions a weekday, with or without "next", use that weekday's date
         from this list. Don't calculate weekday dates yourself.
 
-        Analyze the memory for TWO things:
+        Analyze the memory for THREE things:
         1. Store confirmation message
-        2. Whether it needs a reminder and its details
+        2. The memory to store and whether it is time-bound
+        3. Whether it needs a reminder and its details
         
         Your answer MUST return this JSON:
         {
             "answer": "Confirmation message to user",
+            "memory": "The memory to store",
+            "time_bound": boolean,
             "suggest_reminder": boolean,
             "reminder_topic": "topic",
             "schedule": "YYYY-MM-DDTHH:MM:SS or empty",
             "is_recurring": boolean,
             "frequency": "DAILY/WEEKLY or null",
-            "by_days": ["MO"] or null,
-            "memory_stored": boolean
+            "by_days": ["MO"] or null
         }
         
         PS: important, no extra text, only the JSON. Also, the reminder_topic should always
         be filled if suggest_reminder=true, and it must contain a clear, concise topic. It
         should not contain details about the schedule or recurrence.
+        
+        MEMORY: Write the memory as a concise statement about the user, starting with "User",
+        such as "User's new couch will arrive on 2026-10-01." Always use absolute dates
+        (YYYY-MM-DD), never relative ones like "tomorrow" or "next Thursday", because the
+        memory will be read on later days. Write times the way they're spoken, like "2 PM" or
+        "6:57 PM", never as timestamps like "2026-09-27T18:57:27".
+        
+        TIME-BOUND MEMORIES: Set time_bound=true only when the memory stops being useful once
+        its date passes, such as appointments, deliveries, trips, or one-off tasks. Set it to
+        false for lasting facts, even when they have a date, such as birthdays, anniversaries,
+        or preferences. When time_bound=true, fill schedule with the date and time of the event,
+        even if suggest_reminder=false.
         
         REMINDER DETECTION: Set suggest_reminder=true for:
         - Specific time: "at 10 AM", "at noon"
@@ -103,33 +121,41 @@ public class RememberIntentHandler implements RequestHandler {
         User: "Remember I have a dentist appointment next Tuesday at 2 PM"
         Response: {
             "answer": "Certainly, I've noted your dentist appointment for next Tuesday at 2 PM.",
+            "memory": "User has a dentist appointment on 2024-01-09 at 2 PM.",
+            "time_bound": true,
             "suggest_reminder": true,
             "reminder_topic": "Dentist appointment",
             "schedule": "2024-01-09T14:00:00",
             "is_recurring": false,
             "frequency": null,
-            "by_days": null,
-            "memory_stored": true
+            "by_days": null
         }
         
         [Example 2]
         User: "Remember to take vitamins every morning at 8 AM"
         Response: {
             "answer": "I've recorded your daily vitamin reminder for 8 AM.",
+            "memory": "User takes vitamins every morning at 8 AM.",
+            "time_bound": false,
             "suggest_reminder": true,
             "reminder_topic": "Take vitamins",
             "schedule": "2024-01-03T08:00:00",
             "is_recurring": true,
             "frequency": "DAILY",
-            "by_days": null,
-            "memory_stored": true
+            "by_days": null
         }        
         """;
 
-    private final ChatAssistantService chatAssistantService;
+    private static final String MEMORY_NOT_STORED =
+            "I'm sorry, I couldn't store that memory. Please try again.";
 
-    public RememberIntentHandler(ChatAssistantService chatAssistantService) {
+    private final ChatAssistantService chatAssistantService;
+    private final UserMemoryService userMemoryService;
+
+    public RememberIntentHandler(ChatAssistantService chatAssistantService,
+                                 UserMemoryService userMemoryService) {
         this.chatAssistantService = chatAssistantService;
+        this.userMemoryService = userMemoryService;
     }
 
     @Override
@@ -150,7 +176,9 @@ public class RememberIntentHandler implements RequestHandler {
         var aiResponse = processWithAI(context, memory.get());
 
         return aiResponse
-                .map(response -> buildResponseFromAI(handlerInput, response))
+                .map(response -> storeMemory(context, memory.get(), response)
+                        ? buildResponseFromAI(handlerInput, response)
+                        : buildErrorResponse(handlerInput, MEMORY_NOT_STORED))
                 .orElseGet(() -> buildFallbackResponse(handlerInput));
     }
 
@@ -185,6 +213,26 @@ public class RememberIntentHandler implements RequestHandler {
             return parseResponse(response);
         } catch (Exception ex) {
             logger.error("Error processing with AI", ex);
+            return Optional.empty();
+        }
+    }
+
+    private boolean storeMemory(RequestContext requestContext, String spokenMemory, AnswerResponse aiResponse) {
+        var memory = aiResponse.memory() == null || aiResponse.memory().isBlank()
+                ? spokenMemory : aiResponse.memory();
+        var eventTime = aiResponse.timeBound() && !aiResponse.isRecurring()
+                ? parseEventTime(aiResponse.schedule()) : Optional.<LocalDateTime>empty();
+        return userMemoryService.saveMemory(requestContext.userId(), memory, eventTime, requestContext.timezone());
+    }
+
+    private Optional<LocalDateTime> parseEventTime(String schedule) {
+        if (schedule == null || schedule.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(LocalDateTime.parse(schedule));
+        } catch (DateTimeParseException e) {
+            logger.warn("Invalid schedule for a time-bound memory: {}", schedule, e);
             return Optional.empty();
         }
     }
@@ -238,14 +286,16 @@ public class RememberIntentHandler implements RequestHandler {
         return (start >= 0 && end > start) ? response.substring(start, end + 1) : response;
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     private record AnswerResponse(
             String answer,
+            @JsonProperty("memory") String memory,
+            @JsonProperty("time_bound") boolean timeBound,
             @JsonProperty("suggest_reminder") boolean suggestReminder,
             @JsonProperty("reminder_topic") String reminderTopic,
             @JsonProperty("schedule") String schedule,
             @JsonProperty("is_recurring") boolean isRecurring,
             @JsonProperty("frequency") String frequency,
-            @JsonProperty("by_days") List<String> byDays,
-            @JsonProperty("memory_stored") boolean memoryStored
+            @JsonProperty("by_days") List<String> byDays
     ) {}
 }
