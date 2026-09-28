@@ -39,6 +39,19 @@ public class ChatAssistantService {
 
     private static final Logger logger = LoggerFactory.getLogger(ChatAssistantService.class);
 
+    private static final PromptTemplate COMPRESSION_PROMPT = PromptTemplate.from("""
+            Read the conversation between the User and the AI, then rewrite the User's new query
+            as a clear, concise, and self-contained query for information retrieval. Resolve
+            pronouns and references using the conversation, but keep the User's first-person
+            wording, such as "my" and "I", and never add names, including the User's name.
+
+            Conversation:
+            {{chatMemory}}
+
+            User query: {{query}}
+
+            Answer with the rewritten query only, with nothing before or after it.""");
+
     private final List<Object> tools;
     private final ChatModel chatModel;
     private final ScoringModel scoringModel;
@@ -112,7 +125,7 @@ public class ChatAssistantService {
     private RetrievalAugmentor createRetrievalAugmentor(String userId) {
         // Compress the user's query and the preceding conversation into a single query.
         // This should significantly improve the quality of the retrieval process.
-        QueryTransformer queryTransformer = timed(new CompressingQueryTransformer(chatModel));
+        QueryTransformer queryTransformer = timed(new CompressingQueryTransformer(chatModel, COMPRESSION_PROMPT));
 
         // Source of data for retrieval. The question will be asked against the user
         // memories and the general knowledge base. The contentAggregator will be
@@ -136,6 +149,7 @@ public class ChatAssistantService {
         ContentAggregator contentAggregator = RelevanceContentAggregator.builder()
                 .scoringModel(scoringModel)
                 .minScore(0.5)
+                .groupBy(SUBJECT_METADATA_KEY, ATTRIBUTE_METADATA_KEY)
                 .build();
 
         return DefaultRetrievalAugmentor.builder()

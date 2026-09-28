@@ -10,6 +10,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.riferrei.myjarvis.helpers.HandlerHelper;
+import com.riferrei.myjarvis.helpers.MemoryKey;
 import com.riferrei.myjarvis.helpers.RequestContext;
 import com.riferrei.myjarvis.services.ChatAssistantService;
 import com.riferrei.myjarvis.services.UserMemoryService;
@@ -67,6 +68,9 @@ public class RememberIntentHandler implements RequestHandler {
         {
             "answer": "Confirmation message to user",
             "memory": "The memory to store",
+            "subject": "user, spouse, child:pedro, or unknown",
+            "attribute": "birthday, favorite_color, appointment:dentist, or null",
+            "value": "null, unless the attribute holds several values",
             "time_bound": boolean,
             "suggest_reminder": boolean,
             "reminder_topic": "topic",
@@ -86,6 +90,16 @@ public class RememberIntentHandler implements RequestHandler {
         memory will be read on later days. Write times the way they're spoken, like "2 PM" or
         "6:57 PM", never as timestamps like "2026-09-27T18:57:27".
         
+        MEMORY KEY: subject is who the memory is about: user, spouse, child, parent, sibling,
+        friend, pet, and so on, followed by :name when a name is given, such as child:pedro.
+        Use unknown when it's unclear, such as "her birthday". attribute is the snake_case
+        property the memory sets, such as birthday or favorite_color, or the kind of event,
+        such as appointment:dentist or piano_lesson. Set attribute to null when the memory
+        holds several facts, or when the subject has no name and the user may have more than
+        one, such as "my son". Fill value only when the attribute can hold several values at
+        once, such as allergy or hobby, like "peanuts". Attributes with a single value, such
+        as favorite_color, birthday, or name, always have value null.
+
         TIME-BOUND MEMORIES: Set time_bound=true only when the memory stops being useful once
         its date passes, such as appointments, deliveries, trips, or one-off tasks. Set it to
         false for lasting facts, even when they have a date, such as birthdays, anniversaries,
@@ -122,6 +136,9 @@ public class RememberIntentHandler implements RequestHandler {
         Response: {
             "answer": "Certainly, I've noted your dentist appointment for next Tuesday at 2 PM.",
             "memory": "User has a dentist appointment on 2024-01-09 at 2 PM.",
+            "subject": "user",
+            "attribute": "appointment:dentist",
+            "value": null,
             "time_bound": true,
             "suggest_reminder": true,
             "reminder_topic": "Dentist appointment",
@@ -136,6 +153,9 @@ public class RememberIntentHandler implements RequestHandler {
         Response: {
             "answer": "I've recorded your daily vitamin reminder for 8 AM.",
             "memory": "User takes vitamins every morning at 8 AM.",
+            "subject": "user",
+            "attribute": "vitamins",
+            "value": null,
             "time_bound": false,
             "suggest_reminder": true,
             "reminder_topic": "Take vitamins",
@@ -222,7 +242,9 @@ public class RememberIntentHandler implements RequestHandler {
                 ? spokenMemory : aiResponse.memory();
         var eventTime = aiResponse.timeBound() && !aiResponse.isRecurring()
                 ? parseEventTime(aiResponse.schedule()) : Optional.<LocalDateTime>empty();
-        return userMemoryService.saveMemory(requestContext.userId(), memory, eventTime, requestContext.timezone());
+        var memoryKey = new MemoryKey(aiResponse.subject(), aiResponse.attribute(), aiResponse.value());
+        return userMemoryService.saveMemory(requestContext.userId(), memory, memoryKey,
+                eventTime, requestContext.timezone());
     }
 
     private Optional<LocalDateTime> parseEventTime(String schedule) {
@@ -290,6 +312,9 @@ public class RememberIntentHandler implements RequestHandler {
     private record AnswerResponse(
             String answer,
             @JsonProperty("memory") String memory,
+            @JsonProperty("subject") String subject,
+            @JsonProperty("attribute") String attribute,
+            @JsonProperty("value") String value,
             @JsonProperty("time_bound") boolean timeBound,
             @JsonProperty("suggest_reminder") boolean suggestReminder,
             @JsonProperty("reminder_topic") String reminderTopic,

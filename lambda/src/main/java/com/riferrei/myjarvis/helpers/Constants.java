@@ -1,5 +1,7 @@
 package com.riferrei.myjarvis.helpers;
 
+import java.util.Set;
+
 public enum Constants {
     INSTANCE;
     public static final String SKILL_NAME = "My Jarvis";
@@ -18,6 +20,12 @@ public enum Constants {
 
     public static final String OWNER_ID_METADATA_KEY = "ownerId";
     public static final String EXPIRES_AT_METADATA_KEY = "expiresAt";
+    public static final String SUBJECT_METADATA_KEY = "subject";
+    public static final String ATTRIBUTE_METADATA_KEY = "attribute";
+    public static final String VALUE_METADATA_KEY = "value";
+    public static final String CREATED_AT_METADATA_KEY = "createdAt";
+    public static final String UNKNOWN_SUBJECT = "unknown";
+    public static final Set<String> SINGULAR_SUBJECTS = Set.of("user", "spouse");
     public static final String USER_ID_PARAM = "userId";
     public static final String USER_NAME_PARAM = "userName";
     public static final String TIME_ZONE_PARAM = "timeZone";

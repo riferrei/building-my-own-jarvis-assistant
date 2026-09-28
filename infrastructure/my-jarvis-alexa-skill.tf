@@ -114,7 +114,10 @@ locals {
     Dimensions       = var.embedding_dimensions
     DistanceFunction = "COSINE"
     Projection       = { ProjectionType = "ALL" }
-    SearchSchema     = [{ AttributeName = "ownerId", SearchSchemaElementType = "INLINE_FILTER" }]
+    SearchSchema = [
+      { AttributeName = "ownerId", SearchSchemaElementType = "INLINE_FILTER" },
+      { AttributeName = "subject", SearchSchemaElementType = "INLINE_FILTER" }
+    ]
   }])
 }
 
@@ -123,6 +126,7 @@ resource "null_resource" "my_jarvis_alexa_skill_handler_user_memories" {
     region         = data.aws_region.current.region
     table_name     = var.dynamodb_user_memory_table_name
     vector_indexes = local.user_memory_vector_indexes
+    stream_view    = "NEW_IMAGE"
   }
 
   provisioner "local-exec" {
@@ -132,7 +136,9 @@ resource "null_resource" "my_jarvis_alexa_skill_handler_user_memories" {
       aws dynamodb create-table --region "$REGION" --table-name "$TABLE_NAME" \
         --billing-mode PAY_PER_REQUEST \
         --attribute-definitions AttributeName=id,AttributeType=S AttributeName=ownerId,AttributeType=S \
+          AttributeName=subject,AttributeType=S \
         --key-schema AttributeName=id,KeyType=HASH \
+        --stream-specification StreamEnabled=true,StreamViewType="$STREAM_VIEW" \
         --vector-indexes "$VECTOR_INDEXES" > /dev/null
       aws dynamodb wait table-exists --region "$REGION" --table-name "$TABLE_NAME"
     EOT
@@ -140,6 +146,7 @@ resource "null_resource" "my_jarvis_alexa_skill_handler_user_memories" {
       REGION         = self.triggers.region
       TABLE_NAME     = self.triggers.table_name
       VECTOR_INDEXES = self.triggers.vector_indexes
+      STREAM_VIEW    = self.triggers.stream_view
     }
   }
 

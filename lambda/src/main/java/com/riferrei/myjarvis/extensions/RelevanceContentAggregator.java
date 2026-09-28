@@ -16,6 +16,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class RelevanceContentAggregator implements ContentAggregator {
@@ -24,13 +26,15 @@ public class RelevanceContentAggregator implements ContentAggregator {
 
     private final ScoringModel scoringModel;
     private final double minScore;
+    private final List<String> groupKeys;
 
     private record ScoredContent(Content content, double score) {
     }
 
-    private RelevanceContentAggregator(ScoringModel scoringModel, double minScore) {
+    private RelevanceContentAggregator(ScoringModel scoringModel, double minScore, List<String> groupKeys) {
         this.scoringModel = scoringModel;
         this.minScore = minScore;
+        this.groupKeys = groupKeys;
     }
 
     @Override
@@ -57,14 +61,35 @@ public class RelevanceContentAggregator implements ContentAggregator {
                 .toList();
 
         var relevant = ranked.stream().filter(scored -> scored.score() >= minScore).toList();
-        if (!relevant.isEmpty()) {
+        if (relevant.isEmpty()) {
+            logger.debug("No content scored at or above {}; keeping top content scored {}",
+                    minScore, ranked.getFirst().score());
+            relevant = List.of(ranked.getFirst());
+        } else {
             logger.debug("Kept {} of {} contents scored at or above {}", relevant.size(), ranked.size(), minScore);
-            return relevant.stream().map(RelevanceContentAggregator::withScore).toList();
         }
 
-        var top = ranked.getFirst();
-        logger.debug("No content scored at or above {}; keeping top content scored {}", minScore, top.score());
-        return List.of(withScore(top));
+        var grouped = withSameGroup(relevant, ranked);
+        if (grouped.size() > relevant.size()) {
+            logger.debug("Added {} contents sharing {} with the kept ones", grouped.size() - relevant.size(), groupKeys);
+        }
+        return grouped.stream().map(RelevanceContentAggregator::withScore).toList();
+    }
+
+    private List<ScoredContent> withSameGroup(List<ScoredContent> kept, List<ScoredContent> ranked) {
+        if (groupKeys.isEmpty()) {
+            return kept;
+        }
+        var groups = kept.stream().map(this::groupOf).flatMap(Optional::stream).collect(Collectors.toSet());
+        return ranked.stream()
+                .filter(scored -> kept.contains(scored) || groupOf(scored).filter(groups::contains).isPresent())
+                .toList();
+    }
+
+    private Optional<List<String>> groupOf(ScoredContent scored) {
+        var metadata = scored.content().textSegment().metadata();
+        var values = groupKeys.stream().map(metadata::getString).toList();
+        return values.contains(null) ? Optional.empty() : Optional.of(values);
     }
 
     private static Content withScore(ScoredContent scored) {
@@ -80,6 +105,7 @@ public class RelevanceContentAggregator implements ContentAggregator {
     public static class Builder {
         private ScoringModel scoringModel;
         private Double minScore;
+        private List<String> groupKeys = List.of();
 
         public Builder scoringModel(ScoringModel value) {
             this.scoringModel = value;
@@ -91,10 +117,15 @@ public class RelevanceContentAggregator implements ContentAggregator {
             return this;
         }
 
+        public Builder groupBy(String... keys) {
+            this.groupKeys = List.of(keys);
+            return this;
+        }
+
         public RelevanceContentAggregator build() {
             Objects.requireNonNull(scoringModel, "scoringModel is required");
             Objects.requireNonNull(minScore, "minScore is required");
-            return new RelevanceContentAggregator(scoringModel, minScore);
+            return new RelevanceContentAggregator(scoringModel, minScore, groupKeys);
         }
     }
 }
