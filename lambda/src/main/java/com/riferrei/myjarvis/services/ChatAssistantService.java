@@ -26,7 +26,6 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import com.riferrei.myjarvis.extensions.RelevanceContentAggregator;
 import com.riferrei.myjarvis.extensions.SessionMemoryChat;
 import com.riferrei.myjarvis.extensions.SessionMemoryStore;
-import com.riferrei.myjarvis.helpers.OwnerId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -168,7 +167,7 @@ public class ChatAssistantService {
                 .embeddingModel(embeddingModel)
                 .maxResults(Integer.parseInt(USER_MEMORIES_SEARCH_LIMIT))
                 .filter(MetadataFilterBuilder.metadataKey(OWNER_ID_METADATA_KEY)
-                        .isEqualTo(OwnerId.sanitize(userId)))
+                        .isEqualTo(userId))
                 .build();
     }
 

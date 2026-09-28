@@ -9,9 +9,6 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.DeleteRequest;
 import software.amazon.awssdk.services.dynamodb.model.WriteRequest;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -49,26 +46,12 @@ public class SessionMemoryStore implements ChatMemoryStore {
     private record SessionEvent(String role, String text) {
     }
 
-    private static String sanitizeSessionId(String sessionId) {
-        try {
-            var digest = MessageDigest.getInstance("SHA-256");
-            var hash = digest.digest(sessionId.getBytes(StandardCharsets.UTF_8));
-            var sb = new StringBuilder(64);
-            for (byte b : hash) {
-                sb.append(String.format("%02x", b));
-            }
-            return sb.toString();
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA-256 not available", e);
-        }
-    }
-
     @Override
     public List<ChatMessage> getMessages(Object memoryId) {
-        var sanitizedId = sanitizeSessionId(memoryId.toString());
+        var sessionId = memoryId.toString();
         var chatMessages = new ArrayList<ChatMessage>();
 
-        for (SessionEvent event : fetchSessionEvents(sanitizedId)) {
+        for (SessionEvent event : fetchSessionEvents(sessionId)) {
             var role = event.role();
             var text = event.text();
 
@@ -99,7 +82,7 @@ public class SessionMemoryStore implements ChatMemoryStore {
 
     @Override
     public void updateMessages(Object memoryId, List<ChatMessage> list) {
-        var sanitizedId = sanitizeSessionId(memoryId.toString());
+        var sessionId = memoryId.toString();
 
         var newMessages = list.size() > lastFetchedCount
                 ? list.subList(lastFetchedCount, list.size())
@@ -119,11 +102,11 @@ public class SessionMemoryStore implements ChatMemoryStore {
 
             if (role == null) continue;
 
-            String actorId = "USER".equals(role) ? sanitizedId : "assistant";
+            String actorId = "USER".equals(role) ? sessionId : "assistant";
             String text = messageContent(message);
             if (text == null || text.isBlank()) continue;
 
-            addSessionEvent(sanitizedId, actorId, role, text, System.currentTimeMillis());
+            addSessionEvent(sessionId, actorId, role, text, System.currentTimeMillis());
         }
 
         lastFetchedCount = list.size();
@@ -131,11 +114,11 @@ public class SessionMemoryStore implements ChatMemoryStore {
 
     @Override
     public void deleteMessages(Object memoryId) {
-        var sanitizedId = sanitizeSessionId(memoryId.toString());
-        deleteSessionEvents(sanitizedId);
+        var sessionId = memoryId.toString();
+        deleteSessionEvents(sessionId);
     }
 
-    private List<SessionEvent> fetchSessionEvents(String sanitizedSessionId) {
+    private List<SessionEvent> fetchSessionEvents(String sessionId) {
         var nowMillis = System.currentTimeMillis();
         long start = System.nanoTime();
 
@@ -144,7 +127,7 @@ public class SessionMemoryStore implements ChatMemoryStore {
                     .tableName(tableName)
                     .keyConditionExpression("#sid = :sid")
                     .expressionAttributeNames(Map.of("#sid", SESSION_ID_ATTRIBUTE))
-                    .expressionAttributeValues(Map.of(":sid", AttributeValue.fromS(sanitizedSessionId)))
+                    .expressionAttributeValues(Map.of(":sid", AttributeValue.fromS(sessionId)))
                     .scanIndexForward(true)
             );
 
@@ -159,12 +142,12 @@ public class SessionMemoryStore implements ChatMemoryStore {
             logger.info("Loaded {} session events in {} ms", events.size(), elapsedMillis(start));
             return events;
         } catch (Exception ex) {
-            logger.error("Error fetching session memory for: {}", sanitizedSessionId, ex);
+            logger.error("Error fetching session memory for: {}", sessionId, ex);
             return List.of();
         }
     }
 
-    private void addSessionEvent(String sanitizedSessionId,
+    private void addSessionEvent(String sessionId,
                                  String actorId,
                                  String role,
                                  String text,
@@ -177,7 +160,7 @@ public class SessionMemoryStore implements ChatMemoryStore {
             dynamoDbClient.putItem(builder -> builder
                     .tableName(tableName)
                     .item(Map.of(
-                            SESSION_ID_ATTRIBUTE, AttributeValue.fromS(sanitizedSessionId),
+                            SESSION_ID_ATTRIBUTE, AttributeValue.fromS(sessionId),
                             EVENT_ID_ATTRIBUTE, AttributeValue.fromS(eventId),
                             ROLE_ATTRIBUTE, AttributeValue.fromS(role),
                             TEXT_ATTRIBUTE, AttributeValue.fromS(text),
@@ -188,22 +171,22 @@ public class SessionMemoryStore implements ChatMemoryStore {
             );
             logger.info("Saved {} session event in {} ms", role, elapsedMillis(start));
         } catch (Exception ex) {
-            logger.error("Error adding session event for: {}", sanitizedSessionId, ex);
+            logger.error("Error adding session event for: {}", sessionId, ex);
         }
     }
 
-    private void deleteSessionEvents(String sanitizedSessionId) {
+    private void deleteSessionEvents(String sessionId) {
         try {
             var response = dynamoDbClient.query(builder -> builder
                     .tableName(tableName)
                     .keyConditionExpression("#sid = :sid")
                     .projectionExpression("#sid, #eid")
                     .expressionAttributeNames(Map.of("#sid", SESSION_ID_ATTRIBUTE, "#eid", EVENT_ID_ATTRIBUTE))
-                    .expressionAttributeValues(Map.of(":sid", AttributeValue.fromS(sanitizedSessionId)))
+                    .expressionAttributeValues(Map.of(":sid", AttributeValue.fromS(sessionId)))
             );
 
             if (response.items().isEmpty()) {
-                logger.warn("Session memory not found for: {}", sanitizedSessionId);
+                logger.warn("Session memory not found for: {}", sessionId);
                 return;
             }
 
@@ -225,9 +208,9 @@ public class SessionMemoryStore implements ChatMemoryStore {
                         .requestItems(Map.of(tableName, batch)));
             }
 
-            logger.info("Successfully deleted session memory for: {}", sanitizedSessionId);
+            logger.info("Successfully deleted session memory for: {}", sessionId);
         } catch (Exception ex) {
-            logger.error("Error deleting session memory for: {}", sanitizedSessionId, ex);
+            logger.error("Error deleting session memory for: {}", sessionId, ex);
         }
     }
 

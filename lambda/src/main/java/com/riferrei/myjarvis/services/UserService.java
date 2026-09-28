@@ -1,6 +1,5 @@
 package com.riferrei.myjarvis.services;
 
-import com.riferrei.myjarvis.helpers.OwnerId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
@@ -34,7 +33,7 @@ public class UserService {
         try {
             var item = dynamoDbClient.getItem(builder -> builder
                     .tableName(tableName)
-                    .key(Map.of(USER_ID_ATTRIBUTE, AttributeValue.fromS(OwnerId.sanitize(userId))))
+                    .key(Map.of(USER_ID_ATTRIBUTE, AttributeValue.fromS(userId)))
             ).item();
 
             if (item == null || item.isEmpty()) {
@@ -62,7 +61,7 @@ public class UserService {
             dynamoDbClient.putItem(builder -> builder
                     .tableName(tableName)
                     .item(Map.of(
-                            USER_ID_ATTRIBUTE, AttributeValue.fromS(OwnerId.sanitize(userId)),
+                            USER_ID_ATTRIBUTE, AttributeValue.fromS(userId),
                             USER_NAME_ATTRIBUTE, AttributeValue.fromS(sanitizedUserName)
                     ))
             );

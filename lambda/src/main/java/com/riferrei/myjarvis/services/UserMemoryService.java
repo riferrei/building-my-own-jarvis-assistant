@@ -4,7 +4,6 @@ import dev.langchain4j.data.document.Metadata;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.store.embedding.EmbeddingStore;
-import com.riferrei.myjarvis.helpers.OwnerId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,7 +36,7 @@ public class UserMemoryService {
         long start = System.nanoTime();
         try {
             var metadata = new HashMap<String, Object>();
-            metadata.put(OWNER_ID_METADATA_KEY, OwnerId.sanitize(userId));
+            metadata.put(OWNER_ID_METADATA_KEY, userId);
             expiresAt.ifPresent(epochSeconds -> metadata.put(EXPIRES_AT_METADATA_KEY, epochSeconds));
 
             var textSegment = TextSegment.from(memory, Metadata.from(metadata));
