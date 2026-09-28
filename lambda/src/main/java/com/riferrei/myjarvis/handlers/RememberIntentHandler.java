@@ -87,7 +87,9 @@ public class RememberIntentHandler implements RequestHandler {
         MEMORY: Write the memory as a concise statement about the user, starting with "User",
         such as "User's new couch will arrive on 2026-10-01." Always use absolute dates
         (YYYY-MM-DD), never relative ones like "tomorrow" or "next Thursday", because the
-        memory will be read on later days. Write times the way they're spoken, like "2 PM" or
+        memory will be read on later days. When the user gives a date without a year, such
+        as a birthday on May 3rd, write it without a year, like "May 3", and never invent
+        one. Write times the way they're spoken, like "2 PM" or
         "6:57 PM", never as timestamps like "2026-09-27T18:57:27".
         
         MEMORY KEY: subject is who the memory is about: user, spouse, child, parent, sibling,

@@ -207,7 +207,7 @@ On the next request, the assistant creates your user record again from your Alex
 
 ## Architecture
 ![Software Architecture](./images/software-architecture.png)
-This architecture uses an Alexa skill written in Java and hosted as an AWS Lambda function. The Lambda implements a stream handler that processes user requests and responses, using DynamoDB (plain tables for user records and short-term session memory, plus a vector table for long-term user memories) as its backend layer.
+This architecture uses an Alexa skill written in Java and hosted as an AWS Lambda function. The Lambda implements a stream handler that processes user requests and responses, using DynamoDB (plain tables for user records and short-term session memory, plus a vector table for long-term user memories) as its backend layer. A second Lambda function, triggered by the vector table's DynamoDB stream, removes long-term memories that a newer memory replaces.
 
 ![Chat Assistant Service](./assets/chat-assistant-service.png)
 As part of the stream handler implementation, it uses a Chat Assistant Service that leverages LangChain4J to manage interactions with the memory stores. This service implements context engineering, ensuring that conversations are enriched with relevant user memories retrieved from DynamoDB and knowledge-base content retrieved from S3 Vectors, re-ranked through the Amazon Bedrock Rerank API (Cohere Rerank 3.5 by default) so only the relevant results reach the prompt. Claude Sonnet 5 on Amazon Bedrock is the LLM used to process and generate responses, and Amazon Titan Text Embeddings V2 on Amazon Bedrock generates the embeddings for the knowledge base and user memories.

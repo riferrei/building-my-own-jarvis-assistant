@@ -94,6 +94,8 @@ public enum Constants {
                     System.getenv("USER_MEMORIES_SEARCH_LIMIT").isEmpty())
                     ? String.valueOf(10) : System.getenv("USER_MEMORIES_SEARCH_LIMIT");
 
+    public static final int CONSOLIDATION_SEARCH_LIMIT = 5;
+
     public static final String KNOWLEDGE_BASE_SEARCH_LIMIT =
             (System.getenv("KNOWLEDGE_BASE_SEARCH_LIMIT") == null ||
                     System.getenv("KNOWLEDGE_BASE_SEARCH_LIMIT").isEmpty())

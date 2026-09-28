@@ -197,6 +197,48 @@ locals {
   bedrock_rerank_region              = coalesce(var.bedrock_rerank_region, data.aws_region.current.region)
 }
 
+locals {
+  bedrock_chat_and_embedding_statements = [
+    {
+      Effect   = "Allow"
+      Action   = "bedrock:InvokeModel"
+      Resource = local.bedrock_chat_inference_profile_arn
+      Condition = {
+        StringEquals = {
+          "aws:RequestedRegion" = data.aws_region.current.region
+        }
+      }
+    },
+    {
+      Effect   = "Allow"
+      Action   = "bedrock:InvokeModel"
+      Resource = "arn:aws:bedrock:${data.aws_region.current.region}::foundation-model/${local.bedrock_chat_model_name}"
+      Condition = {
+        StringEquals = {
+          "aws:RequestedRegion"         = data.aws_region.current.region
+          "bedrock:InferenceProfileArn" = local.bedrock_chat_inference_profile_arn
+        }
+      }
+    },
+    {
+      Effect   = "Allow"
+      Action   = "bedrock:InvokeModel"
+      Resource = "arn:aws:bedrock:::foundation-model/${local.bedrock_chat_model_name}"
+      Condition = {
+        StringEquals = {
+          "aws:RequestedRegion"         = "unspecified"
+          "bedrock:InferenceProfileArn" = local.bedrock_chat_inference_profile_arn
+        }
+      }
+    },
+    {
+      Effect   = "Allow"
+      Action   = "bedrock:InvokeModel"
+      Resource = "arn:aws:bedrock:${data.aws_region.current.region}::foundation-model/${var.embedding_model_name}"
+    }
+  ]
+}
+
 resource "aws_iam_role" "my_jarvis_alexa_skill_handler_role" {
   name               = "${var.application_prefix}-role"
   assume_role_policy = <<EOF
@@ -219,44 +261,7 @@ resource "aws_iam_role_policy" "my_jarvis_alexa_skill_handler_role_policy" {
   role = aws_iam_role.my_jarvis_alexa_skill_handler_role.name
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = "bedrock:InvokeModel"
-        Resource = local.bedrock_chat_inference_profile_arn
-        Condition = {
-          StringEquals = {
-            "aws:RequestedRegion" = data.aws_region.current.region
-          }
-        }
-      },
-      {
-        Effect   = "Allow"
-        Action   = "bedrock:InvokeModel"
-        Resource = "arn:aws:bedrock:${data.aws_region.current.region}::foundation-model/${local.bedrock_chat_model_name}"
-        Condition = {
-          StringEquals = {
-            "aws:RequestedRegion"         = data.aws_region.current.region
-            "bedrock:InferenceProfileArn" = local.bedrock_chat_inference_profile_arn
-          }
-        }
-      },
-      {
-        Effect   = "Allow"
-        Action   = "bedrock:InvokeModel"
-        Resource = "arn:aws:bedrock:::foundation-model/${local.bedrock_chat_model_name}"
-        Condition = {
-          StringEquals = {
-            "aws:RequestedRegion"         = "unspecified"
-            "bedrock:InferenceProfileArn" = local.bedrock_chat_inference_profile_arn
-          }
-        }
-      },
-      {
-        Effect   = "Allow"
-        Action   = "bedrock:InvokeModel"
-        Resource = "arn:aws:bedrock:${data.aws_region.current.region}::foundation-model/${var.embedding_model_name}"
-      },
+    Statement = concat(local.bedrock_chat_and_embedding_statements, [
       {
         Effect   = "Allow"
         Action   = "bedrock:InvokeModel"
@@ -357,7 +362,7 @@ resource "aws_iam_role_policy" "my_jarvis_alexa_skill_handler_role_policy" {
           aws_dynamodb_table.my_jarvis_alexa_skill_handler_session_memory.arn
         ]
       }
-    ]
+    ])
   })
 }
 
@@ -371,7 +376,7 @@ resource "aws_lambda_function" "my_jarvis_alexa_skill_handler" {
     aws_dynamodb_table.my_jarvis_alexa_skill_handler_session_memory,
     null_resource.my_jarvis_alexa_skill_handler_user_memories
   ]
-  function_name    = "${var.application_prefix}-function"
+  function_name    = "${var.application_prefix}-alexa-skill-handler"
   description      = "Backend function for the My Jarvis Alexa Skill"
   s3_bucket        = aws_s3_bucket.my_jarvis_alexa_skill_handler_lambda_artifacts.id
   s3_key           = aws_s3_object.my_jarvis_skill_handler_lambda_jar.key
@@ -431,6 +436,120 @@ resource "aws_cloudwatch_event_target" "my_jarvis_alexa_skill_handler_knowledge_
   target_id = aws_lambda_function.my_jarvis_alexa_skill_handler.function_name
   arn       = aws_lambda_function.my_jarvis_alexa_skill_handler.arn
   input     = templatefile("templates/knowledge-base-call.tftpl", {})
+}
+
+data "aws_dynamodb_table" "my_jarvis_alexa_skill_handler_user_memories" {
+  depends_on = [null_resource.my_jarvis_alexa_skill_handler_user_memories]
+  name       = var.dynamodb_user_memory_table_name
+}
+
+resource "aws_iam_role" "my_jarvis_memory_consolidation_role" {
+  name = "${var.application_prefix}-memory-consolidation-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action    = "sts:AssumeRole"
+        Principal = { Service = "lambda.amazonaws.com" }
+        Effect    = "Allow"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "my_jarvis_memory_consolidation_role_policy" {
+  role = aws_iam_role.my_jarvis_memory_consolidation_role.name
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(local.bedrock_chat_and_embedding_statements, [
+      {
+        Effect   = "Allow"
+        Resource = ["*"]
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:SearchVectors"
+        ]
+        Resource = [
+          data.aws_dynamodb_table.my_jarvis_alexa_skill_handler_user_memories.arn,
+          "${data.aws_dynamodb_table.my_jarvis_alexa_skill_handler_user_memories.arn}/index/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:DescribeStream",
+          "dynamodb:GetRecords",
+          "dynamodb:GetShardIterator"
+        ]
+        Resource = data.aws_dynamodb_table.my_jarvis_alexa_skill_handler_user_memories.stream_arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = "dynamodb:ListStreams"
+        Resource = "*"
+      }
+    ])
+  })
+}
+
+resource "aws_lambda_function" "my_jarvis_memory_dedup_handler" {
+  depends_on = [
+    aws_iam_role_policy.my_jarvis_memory_consolidation_role_policy,
+    aws_s3_object.my_jarvis_skill_handler_lambda_jar
+  ]
+  function_name    = "${var.application_prefix}-memory-dedup-handler"
+  description      = "Deletes the user memories that newer memories replace"
+  s3_bucket        = aws_s3_bucket.my_jarvis_alexa_skill_handler_lambda_artifacts.id
+  s3_key           = aws_s3_object.my_jarvis_skill_handler_lambda_jar.key
+  source_code_hash = data.local_file.my_jarvis_skill_handler_jar_file.content_base64sha256
+  handler          = "com.riferrei.myjarvis.MemoryDeDupHandler::handleRequest"
+  role             = aws_iam_role.my_jarvis_memory_consolidation_role.arn
+  runtime          = "java21"
+  memory_size      = 1024
+  timeout          = 120
+  environment {
+    variables = {
+      BEDROCK_CHAT_MODEL_ID           = var.bedrock_chat_model_id
+      BEDROCK_CHAT_MAX_TOKENS         = var.bedrock_chat_max_tokens
+      EMBEDDING_MODEL_NAME            = var.embedding_model_name
+      EMBEDDING_DIMENSIONS            = var.embedding_dimensions
+      DYNAMODB_USER_MEMORY_TABLE_NAME = var.dynamodb_user_memory_table_name
+      DYNAMODB_USER_MEMORY_INDEX_NAME = var.dynamodb_user_memory_index_name
+    }
+  }
+}
+
+resource "aws_lambda_event_source_mapping" "my_jarvis_memory_consolidation_trigger" {
+  event_source_arn               = data.aws_dynamodb_table.my_jarvis_alexa_skill_handler_user_memories.stream_arn
+  function_name                  = aws_lambda_function.my_jarvis_memory_dedup_handler.arn
+  starting_position              = "LATEST"
+  batch_size                     = 10
+  maximum_retry_attempts         = 2
+  maximum_record_age_in_seconds  = 3600
+  bisect_batch_on_function_error = true
+  function_response_types        = ["ReportBatchItemFailures"]
+
+  filter_criteria {
+    filter {
+      pattern = jsonencode({
+        eventName = ["INSERT"]
+        dynamodb = {
+          NewImage = {
+            subject = { S = [{ "anything-but" = ["unknown"] }] }
+          }
+        }
+      })
+    }
+  }
 }
 
 output "my_jarvis_alexa_skill_handler_arn" {
