@@ -23,6 +23,7 @@ import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.filter.MetadataFilterBuilder;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import com.riferrei.myjarvis.extensions.DateQueryTransformer;
 import com.riferrei.myjarvis.extensions.RelevanceContentAggregator;
 import com.riferrei.myjarvis.extensions.SessionMemoryChat;
 import com.riferrei.myjarvis.extensions.SessionMemoryStore;
@@ -44,6 +45,8 @@ public class ChatAssistantService {
             as a clear, concise, and self-contained query for information retrieval. Resolve
             pronouns and references using the conversation, but keep the User's first-person
             wording, such as "my" and "I", and never add names, including the User's name.
+            Keep dates as the User said them, such as "tomorrow" or "on Friday", and never add
+            or calculate a date.
 
             Conversation:
             {{chatMemory}}
@@ -76,19 +79,15 @@ public class ChatAssistantService {
         this.tools = tools;
     }
 
-    public String processQueryWithoutContext(String systemPrompt,
-                                             String userId,
-                                             String timeZone,
-                                             String query) {
+    public String processQueryWithoutContext(String systemPrompt, String query) {
         logger.debug("Processing query without context {}", query);
 
         BasicChatAssistant basicChatAssistant =
                 AiServices.builder(BasicChatAssistant.class)
                         .chatModel(chatModel)
-                        .tools(tools)
                         .build();
 
-        return basicChatAssistant.chat(systemPrompt, query, toolParameters(userId, timeZone));
+        return basicChatAssistant.chat(systemPrompt, query, new InvocationParameters());
     }
 
     public String processQueryWithContext(String systemPrompt,
@@ -99,7 +98,7 @@ public class ChatAssistantService {
         logger.debug("Processing query with context for user: {}", userId);
         long start = System.nanoTime();
 
-        RetrievalAugmentor retrievalAugmentor = createRetrievalAugmentor(userId);
+        RetrievalAugmentor retrievalAugmentor = createRetrievalAugmentor(userId, timeZone);
 
         ContextualChatAssistant contextualChatAssistant =
                 AiServices.builder(ContextualChatAssistant.class)
@@ -122,10 +121,12 @@ public class ChatAssistantService {
         return invocationParameters;
     }
 
-    private RetrievalAugmentor createRetrievalAugmentor(String userId) {
+    private RetrievalAugmentor createRetrievalAugmentor(String userId, String timeZone) {
         // Compress the user's query and the preceding conversation into a single query.
         // This should significantly improve the quality of the retrieval process.
-        QueryTransformer queryTransformer = timed(new CompressingQueryTransformer(chatModel, COMPRESSION_PROMPT));
+        QueryTransformer queryTransformer = timed(chained(
+                new CompressingQueryTransformer(chatModel, COMPRESSION_PROMPT),
+                DateQueryTransformer.builder().timeZone(timeZone).build()));
 
         // Source of data for retrieval. The question will be asked against the user
         // memories and the general knowledge base. The contentAggregator will be
@@ -191,6 +192,12 @@ public class ChatAssistantService {
                 .embeddingModel(embeddingModel)
                 .maxResults(Integer.parseInt(KNOWLEDGE_BASE_SEARCH_LIMIT))
                 .build();
+    }
+
+    private static QueryTransformer chained(QueryTransformer first, QueryTransformer second) {
+        return query -> first.transform(query).stream()
+                .flatMap(transformed -> second.transform(transformed).stream())
+                .toList();
     }
 
     private static QueryTransformer timed(QueryTransformer queryTransformer) {

@@ -91,7 +91,7 @@ public class UserMemoryService {
     }
 
     private long expiresAt(LocalDateTime eventTime, String timeZone) {
-        return eventTime.atZone(ZoneId.of(timeZone)).toEpochSecond();
+        return eventTime.toLocalDate().plusDays(1).atStartOfDay(ZoneId.of(timeZone)).toEpochSecond();
     }
 
 }

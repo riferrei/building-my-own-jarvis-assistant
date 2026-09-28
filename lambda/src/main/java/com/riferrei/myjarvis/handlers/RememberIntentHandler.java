@@ -17,6 +17,7 @@ import com.riferrei.myjarvis.services.UserMemoryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.List;
@@ -57,7 +58,8 @@ public class RememberIntentHandler implements RequestHandler {
         IMPORTANT DATE CALCULATION:
         The next seven days are: %s.
         When the user mentions a weekday, with or without "next", use that weekday's date
-        from this list. Don't calculate weekday dates yourself.
+        from this list. Don't calculate weekday dates yourself. For relative times such as
+        "in 4 hours", add them to the current date and time above.
 
         Analyze the memory for THREE things:
         1. Store confirmation message
@@ -83,11 +85,18 @@ public class RememberIntentHandler implements RequestHandler {
         PS: important, no extra text, only the JSON. Also, the reminder_topic should always
         be filled if suggest_reminder=true, and it must contain a clear, concise topic. It
         should not contain details about the schedule or recurrence.
-        
+
+        ANSWER: The answer is spoken aloud, so write dates the way they're said, such as
+        "Wednesday, September 30th", never like "2026-09-30". Never promise, offer, or ask
+        about a reminder in the answer: when suggest_reminder=true, a question asking the
+        user whether to set one up is added after your answer.
+
         MEMORY: Write the memory as a concise statement about the user, starting with "User",
-        such as "User's new couch will arrive on 2026-10-01." Always use absolute dates
-        (YYYY-MM-DD), never relative ones like "tomorrow" or "next Thursday", because the
-        memory will be read on later days. When the user gives a date without a year, such
+        such as "User's new couch will arrive on Thursday, 2026-10-01." Always use absolute
+        dates (YYYY-MM-DD), never relative ones like "tomorrow" or "next Thursday", because the
+        memory will be read on later days. When the date is one of the next seven days, write
+        its weekday from the list above before it, like "Thursday, 2026-10-01", and leave the
+        weekday out for any other date. When the user gives a date without a year, such
         as a birthday on May 3rd, write it without a year, like "May 3", and never invent
         one. Write times the way they're spoken, like "2 PM" or
         "6:57 PM", never as timestamps like "2026-09-27T18:57:27".
@@ -137,7 +146,7 @@ public class RememberIntentHandler implements RequestHandler {
         User: "Remember I have a dentist appointment next Tuesday at 2 PM"
         Response: {
             "answer": "Certainly, I've noted your dentist appointment for next Tuesday at 2 PM.",
-            "memory": "User has a dentist appointment on 2024-01-09 at 2 PM.",
+            "memory": "User has a dentist appointment on Tuesday, 2024-01-09 at 2 PM.",
             "subject": "user",
             "attribute": "appointment:dentist",
             "value": null,
@@ -224,12 +233,7 @@ public class RememberIntentHandler implements RequestHandler {
                     requestContext.timezone(), currentDateTime(requestContext.timezone()),
                     upcomingDates(requestContext.timezone()));
 
-            var response = chatAssistantService.processQueryWithoutContext(
-                    systemPrompt,
-                    requestContext.userId(),
-                    requestContext.timezone(),
-                    question
-            );
+            var response = chatAssistantService.processQueryWithoutContext(systemPrompt, question);
 
             logger.info("AI response: {}", response);
             return parseResponse(response);
@@ -254,7 +258,9 @@ public class RememberIntentHandler implements RequestHandler {
             return Optional.empty();
         }
         try {
-            return Optional.of(LocalDateTime.parse(schedule));
+            return Optional.of(schedule.contains("T")
+                    ? LocalDateTime.parse(schedule)
+                    : LocalDate.parse(schedule).atStartOfDay());
         } catch (DateTimeParseException e) {
             logger.warn("Invalid schedule for a time-bound memory: {}", schedule, e);
             return Optional.empty();

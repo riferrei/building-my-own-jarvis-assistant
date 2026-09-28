@@ -384,6 +384,7 @@ resource "aws_lambda_function" "my_jarvis_alexa_skill_handler" {
   handler          = "com.riferrei.myjarvis.MyJarvisStreamHandler::handleRequest"
   role             = aws_iam_role.my_jarvis_alexa_skill_handler_role.arn
   runtime          = "java21"
+  architectures    = ["arm64"]
   memory_size      = 2048
   timeout          = 60
   environment {
@@ -514,7 +515,8 @@ resource "aws_lambda_function" "my_jarvis_memory_dedup_handler" {
   handler          = "com.riferrei.myjarvis.MemoryDeDupHandler::handleRequest"
   role             = aws_iam_role.my_jarvis_memory_consolidation_role.arn
   runtime          = "java21"
-  memory_size      = 1024
+  architectures    = ["arm64"]
+  memory_size      = 512
   timeout          = 120
   environment {
     variables = {

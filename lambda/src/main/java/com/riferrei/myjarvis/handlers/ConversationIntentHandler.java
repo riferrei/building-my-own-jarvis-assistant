@@ -16,6 +16,7 @@ import java.util.Optional;
 import static com.riferrei.myjarvis.helpers.Constants.*;
 import static com.riferrei.myjarvis.helpers.HandlerHelper.currentDateTime;
 import static com.riferrei.myjarvis.helpers.HandlerHelper.extractRequestContext;
+import static com.riferrei.myjarvis.helpers.HandlerHelper.upcomingDates;
 
 public class ConversationIntentHandler implements RequestHandler {
 
@@ -23,6 +24,8 @@ public class ConversationIntentHandler implements RequestHandler {
 
     private final static String SYSTEM_PROMPT = """
         The user's timezone is %s, and the current date and time there is %s.
+        The next seven days are: %s. When the user mentions a weekday, use that weekday's
+        date from this list. Don't calculate weekday dates yourself.
         
         You are an AI assistant that should act, talk, and behave as if you were J.A.R.V.I.S AI
         from the Iron Man movies. Be formal but friendly, and add personality. You are going to
@@ -77,6 +80,7 @@ public class ConversationIntentHandler implements RequestHandler {
         1. Keep your answer concise with three sentences top. Avoid listing items and bullet points.
         2. Use gender-neutral language - avoid terms like 'sir' or 'madam'.
         3. When talking about dates, use the format Month Day, Year (e.g., January 1, 2020).
+        4. Never offer to set up a reminder, because you can't set one in this conversation.
         """;
 
     private static final String FALLBACK_RESPONSE =
@@ -138,7 +142,8 @@ public class ConversationIntentHandler implements RequestHandler {
                     requestContext.userId(), query);
 
             var systemPrompt = String.format(SYSTEM_PROMPT,
-                    requestContext.timezone(), currentDateTime(requestContext.timezone()));
+                    requestContext.timezone(), currentDateTime(requestContext.timezone()),
+                    upcomingDates(requestContext.timezone()));
 
             var response = chatAssistantService.processQueryWithContext(
                     systemPrompt,
