@@ -16,29 +16,6 @@ public class DateTimeTool {
 
     private static final Logger logger = LoggerFactory.getLogger(DateTimeTool.class);
 
-    @Tool("Get the current date in user's timezone")
-    public String getCurrentDate(InvocationParameters invocationParameters) {
-        var timeZone = userTimeZone(invocationParameters);
-        logger.info("Getting the current date: timeZone={}", timeZone);
-        return LocalDate.now(timeZone).toString();
-    }
-
-    @Tool("Get the current date and time in user's timezone in format yyyy-MM-dd'T'HH:mm:ss")
-    public String getCurrentDateTime(InvocationParameters invocationParameters) {
-        var timeZone = userTimeZone(invocationParameters);
-        logger.info("Getting the current date and time: timeZone={}", timeZone);
-        var now = LocalDateTime.now(timeZone);
-        var formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
-        return now.format(formatter);
-    }
-
-    @Tool("Get the current day of the week in user's timezone")
-    public String getCurrentDayOfWeek(InvocationParameters invocationParameters) {
-        var timeZone = userTimeZone(invocationParameters);
-        logger.info("Getting the current day of the week: timeZone={}", timeZone);
-        return LocalDate.now(timeZone).getDayOfWeek().toString();
-    }
-
     @Tool("Calculate the next occurrence of the specified day of the week")
     public String getNextDayOfWeek(String dayOfWeek, InvocationParameters invocationParameters) {
         var timeZone = userTimeZone(invocationParameters);
