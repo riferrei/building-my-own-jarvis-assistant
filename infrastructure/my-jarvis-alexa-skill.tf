@@ -485,8 +485,8 @@ data "aws_dynamodb_table" "my_jarvis_alexa_skill_handler_user_memories" {
   name       = var.dynamodb_user_memory_table_name
 }
 
-resource "aws_iam_role" "my_jarvis_memory_consolidation_role" {
-  name = "${var.application_prefix}-memory-consolidation-role"
+resource "aws_iam_role" "my_jarvis_memory_dedup_role" {
+  name = "${var.application_prefix}-memory-dedup-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -499,8 +499,8 @@ resource "aws_iam_role" "my_jarvis_memory_consolidation_role" {
   })
 }
 
-resource "aws_iam_role_policy" "my_jarvis_memory_consolidation_role_policy" {
-  role = aws_iam_role.my_jarvis_memory_consolidation_role.name
+resource "aws_iam_role_policy" "my_jarvis_memory_dedup_role_policy" {
+  role = aws_iam_role.my_jarvis_memory_dedup_role.name
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = concat(local.bedrock_chat_and_embedding_statements, [
@@ -545,7 +545,7 @@ resource "aws_iam_role_policy" "my_jarvis_memory_consolidation_role_policy" {
 
 resource "aws_lambda_function" "my_jarvis_memory_dedup_handler" {
   depends_on = [
-    aws_iam_role_policy.my_jarvis_memory_consolidation_role_policy,
+    aws_iam_role_policy.my_jarvis_memory_dedup_role_policy,
     aws_s3_object.my_jarvis_skill_handler_lambda_jar
   ]
   function_name    = "${var.application_prefix}-memory-dedup-handler"
@@ -554,7 +554,7 @@ resource "aws_lambda_function" "my_jarvis_memory_dedup_handler" {
   s3_key           = aws_s3_object.my_jarvis_skill_handler_lambda_jar.key
   source_code_hash = data.local_file.my_jarvis_skill_handler_jar_file.content_base64sha256
   handler          = "com.riferrei.myjarvis.MemoryDeDupHandler::handleRequest"
-  role             = aws_iam_role.my_jarvis_memory_consolidation_role.arn
+  role             = aws_iam_role.my_jarvis_memory_dedup_role.arn
   runtime          = "java21"
   architectures    = ["arm64"]
   memory_size      = 512
@@ -571,7 +571,7 @@ resource "aws_lambda_function" "my_jarvis_memory_dedup_handler" {
   }
 }
 
-resource "aws_lambda_event_source_mapping" "my_jarvis_memory_consolidation_trigger" {
+resource "aws_lambda_event_source_mapping" "my_jarvis_memory_dedup_trigger" {
   event_source_arn               = data.aws_dynamodb_table.my_jarvis_alexa_skill_handler_user_memories.stream_arn
   function_name                  = aws_lambda_function.my_jarvis_memory_dedup_handler.arn
   starting_position              = "LATEST"

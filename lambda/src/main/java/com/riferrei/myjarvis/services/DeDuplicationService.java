@@ -80,7 +80,7 @@ public class DeDuplicationService {
         this.tableName = tableName;
     }
 
-    public boolean consolidate(StoredMemory memory) {
+    public boolean execute(StoredMemory memory) {
         if (UNKNOWN_SUBJECT.equals(memory.subject())) {
             logger.info("Skipping memory {} with an unknown subject", memory.id());
             return true;
@@ -101,11 +101,11 @@ public class DeDuplicationService {
             }
 
             deleteReplaced(memory, replaced.get());
-            logger.info("Consolidated memory {} in {} ms", memory.id(),
+            logger.info("De-duplicated memory {} in {} ms", memory.id(),
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
             return true;
         } catch (Exception ex) {
-            logger.error("Error consolidating memory {}", memory.id(), ex);
+            logger.error("Error de-duplicating memory {}", memory.id(), ex);
             return false;
         }
     }
@@ -113,7 +113,7 @@ public class DeDuplicationService {
     private List<StoredMemory> findCandidates(StoredMemory memory) {
         var request = EmbeddingSearchRequest.builder()
                 .queryEmbedding(embeddingModel.embed(memory.text()).content())
-                .maxResults(CONSOLIDATION_SEARCH_LIMIT + 1)
+                .maxResults(DEDUP_SEARCH_LIMIT + 1)
                 .filter(metadataKey(OWNER_ID_METADATA_KEY).isEqualTo(memory.ownerId())
                         .and(metadataKey(SUBJECT_METADATA_KEY).isEqualTo(memory.subject())))
                 .build();
@@ -122,7 +122,7 @@ public class DeDuplicationService {
                 .map(this::toStoredMemory)
                 .flatMap(Optional::stream)
                 .filter(candidate -> isCandidate(memory, candidate))
-                .limit(CONSOLIDATION_SEARCH_LIMIT)
+                .limit(DEDUP_SEARCH_LIMIT)
                 .toList();
     }
 

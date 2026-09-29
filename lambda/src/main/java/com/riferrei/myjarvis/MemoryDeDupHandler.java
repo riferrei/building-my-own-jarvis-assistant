@@ -90,7 +90,7 @@ public class MemoryDeDupHandler implements RequestStreamHandler {
                 logger.warn("Skipping stream record {} without a complete memory", sequenceNumber);
                 continue;
             }
-            if (!deDuplicationService.consolidate(memory.get())) {
+            if (!deDuplicationService.execute(memory.get())) {
                 batchItemFailures.add(Map.of("itemIdentifier", sequenceNumber));
                 break;
             }
