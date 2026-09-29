@@ -15,6 +15,17 @@ variable "bedrock_chat_model_id" {
   }
 }
 
+variable "bedrock_compression_model_id" {
+  description = "Amazon Bedrock global inference profile ID for the model that compresses follow-up queries before retrieval"
+  type        = string
+  default     = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+
+  validation {
+    condition     = startswith(var.bedrock_compression_model_id, "global.")
+    error_message = "bedrock_compression_model_id must be a global inference profile ID (global.*)."
+  }
+}
+
 variable "bedrock_chat_max_tokens" {
   description = "Maximum output tokens for the Amazon Bedrock chat model"
   type        = number

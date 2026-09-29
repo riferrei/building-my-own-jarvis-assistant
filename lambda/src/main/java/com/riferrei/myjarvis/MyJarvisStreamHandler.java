@@ -53,6 +53,16 @@ public class MyJarvisStreamHandler extends SkillStreamHandler {
             .listeners(new LatencyListener())
             .build();
 
+    private static final ChatModel compressionModel = BedrockChatModel.builder()
+            .region(Region.of(System.getenv("AWS_REGION")))
+            .modelId(BEDROCK_COMPRESSION_MODEL_ID)
+            .defaultRequestParameters(BedrockChatRequestParameters.builder()
+                    .maxOutputTokens(Integer.parseInt(BEDROCK_CHAT_MAX_TOKENS))
+                    .additionalModelRequestField("thinking", Map.of("type", "disabled"))
+                    .build())
+            .listeners(new LatencyListener())
+            .build();
+
     private static final BedrockAgentRuntimeClient bedrockAgentRuntimeClient = BedrockAgentRuntimeClient.builder()
             .region(Region.of(BEDROCK_RERANK_REGION))
             .build();
@@ -102,7 +112,7 @@ public class MyJarvisStreamHandler extends SkillStreamHandler {
 
     private static final ChatAssistantService chatAssistantService =
             new ChatAssistantService(
-                    chatModel, scoringModel, dynamoDbClient,
+                    chatModel, compressionModel, scoringModel, dynamoDbClient,
                     embeddingModel, knowledgeBaseStore, userMemoryStore,
                     List.of(new DateTimeTool())
             );

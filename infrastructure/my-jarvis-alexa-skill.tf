@@ -195,6 +195,9 @@ locals {
   bedrock_chat_model_name            = trimprefix(var.bedrock_chat_model_id, "global.")
   bedrock_chat_inference_profile_arn = "arn:aws:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:inference-profile/${var.bedrock_chat_model_id}"
   bedrock_rerank_region              = coalesce(var.bedrock_rerank_region, data.aws_region.current.region)
+
+  bedrock_compression_model_name            = trimprefix(var.bedrock_compression_model_id, "global.")
+  bedrock_compression_inference_profile_arn = "arn:aws:bedrock:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:inference-profile/${var.bedrock_compression_model_id}"
 }
 
 locals {
@@ -239,6 +242,43 @@ locals {
   ]
 }
 
+locals {
+  bedrock_compression_statements = [
+    {
+      Effect   = "Allow"
+      Action   = "bedrock:InvokeModel"
+      Resource = local.bedrock_compression_inference_profile_arn
+      Condition = {
+        StringEquals = {
+          "aws:RequestedRegion" = data.aws_region.current.region
+        }
+      }
+    },
+    {
+      Effect   = "Allow"
+      Action   = "bedrock:InvokeModel"
+      Resource = "arn:aws:bedrock:${data.aws_region.current.region}::foundation-model/${local.bedrock_compression_model_name}"
+      Condition = {
+        StringEquals = {
+          "aws:RequestedRegion"         = data.aws_region.current.region
+          "bedrock:InferenceProfileArn" = local.bedrock_compression_inference_profile_arn
+        }
+      }
+    },
+    {
+      Effect   = "Allow"
+      Action   = "bedrock:InvokeModel"
+      Resource = "arn:aws:bedrock:::foundation-model/${local.bedrock_compression_model_name}"
+      Condition = {
+        StringEquals = {
+          "aws:RequestedRegion"         = "unspecified"
+          "bedrock:InferenceProfileArn" = local.bedrock_compression_inference_profile_arn
+        }
+      }
+    }
+  ]
+}
+
 resource "aws_iam_role" "my_jarvis_alexa_skill_handler_role" {
   name               = "${var.application_prefix}-role"
   assume_role_policy = <<EOF
@@ -261,7 +301,7 @@ resource "aws_iam_role_policy" "my_jarvis_alexa_skill_handler_role_policy" {
   role = aws_iam_role.my_jarvis_alexa_skill_handler_role.name
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = concat(local.bedrock_chat_and_embedding_statements, [
+    Statement = concat(local.bedrock_chat_and_embedding_statements, local.bedrock_compression_statements, [
       {
         Effect   = "Allow"
         Action   = "bedrock:InvokeModel"
@@ -389,15 +429,16 @@ resource "aws_lambda_function" "my_jarvis_alexa_skill_handler" {
   timeout          = 60
   environment {
     variables = {
-      BEDROCK_CHAT_MODEL_ID      = var.bedrock_chat_model_id
-      BEDROCK_CHAT_MAX_TOKENS    = var.bedrock_chat_max_tokens
-      BEDROCK_RERANK_MODEL_ID    = var.bedrock_rerank_model_id
-      BEDROCK_RERANK_REGION      = local.bedrock_rerank_region
-      KNOWLEDGE_BASE_BUCKET_NAME = local.knowledge_base_bucket_name
-      S3_VECTORS_BUCKET_NAME     = aws_s3vectors_vector_bucket.my_jarvis_alexa_skill_handler_knowledge_base_vectors.vector_bucket_name
-      S3_VECTORS_INDEX_NAME      = aws_s3vectors_index.my_jarvis_alexa_skill_handler_knowledge_base_index.index_name
-      EMBEDDING_MODEL_NAME       = var.embedding_model_name
-      EMBEDDING_DIMENSIONS       = var.embedding_dimensions
+      BEDROCK_CHAT_MODEL_ID        = var.bedrock_chat_model_id
+      BEDROCK_CHAT_MAX_TOKENS      = var.bedrock_chat_max_tokens
+      BEDROCK_COMPRESSION_MODEL_ID = var.bedrock_compression_model_id
+      BEDROCK_RERANK_MODEL_ID      = var.bedrock_rerank_model_id
+      BEDROCK_RERANK_REGION        = local.bedrock_rerank_region
+      KNOWLEDGE_BASE_BUCKET_NAME   = local.knowledge_base_bucket_name
+      S3_VECTORS_BUCKET_NAME       = aws_s3vectors_vector_bucket.my_jarvis_alexa_skill_handler_knowledge_base_vectors.vector_bucket_name
+      S3_VECTORS_INDEX_NAME        = aws_s3vectors_index.my_jarvis_alexa_skill_handler_knowledge_base_index.index_name
+      EMBEDDING_MODEL_NAME         = var.embedding_model_name
+      EMBEDDING_DIMENSIONS         = var.embedding_dimensions
 
       DYNAMODB_USER_MEMORY_TABLE_NAME = var.dynamodb_user_memory_table_name
       DYNAMODB_USER_MEMORY_INDEX_NAME = var.dynamodb_user_memory_index_name

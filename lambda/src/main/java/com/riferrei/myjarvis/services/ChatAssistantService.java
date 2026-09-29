@@ -24,7 +24,7 @@ import dev.langchain4j.store.embedding.filter.MetadataFilterBuilder;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import com.riferrei.myjarvis.extensions.DateQueryTransformer;
-import com.riferrei.myjarvis.extensions.RelevanceContentAggregator;
+import com.riferrei.myjarvis.extensions.SelectiveContentAggregator;
 import com.riferrei.myjarvis.extensions.SessionMemoryChat;
 import com.riferrei.myjarvis.extensions.SessionMemoryStore;
 import org.slf4j.Logger;
@@ -57,6 +57,7 @@ public class ChatAssistantService {
 
     private final List<Object> tools;
     private final ChatModel chatModel;
+    private final ChatModel compressionModel;
     private final ScoringModel scoringModel;
     private final DynamoDbClient dynamoDbClient;
     private final EmbeddingModel embeddingModel;
@@ -64,6 +65,7 @@ public class ChatAssistantService {
     private final EmbeddingStore<TextSegment> userMemoryStore;
 
     public ChatAssistantService(ChatModel chatModel,
+                                ChatModel compressionModel,
                                 ScoringModel scoringModel,
                                 DynamoDbClient dynamoDbClient,
                                 EmbeddingModel embeddingModel,
@@ -71,6 +73,7 @@ public class ChatAssistantService {
                                 EmbeddingStore<TextSegment> userMemoryStore,
                                 List<Object> tools) {
         this.chatModel = chatModel;
+        this.compressionModel = compressionModel;
         this.scoringModel = scoringModel;
         this.dynamoDbClient = dynamoDbClient;
         this.embeddingModel = embeddingModel;
@@ -125,7 +128,7 @@ public class ChatAssistantService {
         // Compress the user's query and the preceding conversation into a single query.
         // This should significantly improve the quality of the retrieval process.
         QueryTransformer queryTransformer = timed(chained(
-                new CompressingQueryTransformer(chatModel, COMPRESSION_PROMPT),
+                new CompressingQueryTransformer(compressionModel, COMPRESSION_PROMPT),
                 DateQueryTransformer.builder().timeZone(timeZone).build()));
 
         // Source of data for retrieval. The question will be asked against the user
@@ -147,10 +150,13 @@ public class ChatAssistantService {
 
         // Once the contents are retrieved, we need to aggregate them into
         // a content list that is coherent and relevant to the user's query.
-        ContentAggregator contentAggregator = RelevanceContentAggregator.builder()
+        ContentAggregator contentAggregator = SelectiveContentAggregator.builder()
                 .scoringModel(scoringModel)
                 .minScore(0.5)
+                .fallbackRatio(0.5)
+                .fallbackMinScore(0.05)
                 .groupBy(SUBJECT_METADATA_KEY, ATTRIBUTE_METADATA_KEY)
+                .keepMatching(ISO_DATE_REGEX)
                 .build();
 
         return DefaultRetrievalAugmentor.builder()

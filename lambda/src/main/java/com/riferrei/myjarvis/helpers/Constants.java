@@ -26,6 +26,7 @@ public enum Constants {
     public static final String CREATED_AT_METADATA_KEY = "createdAt";
     public static final String UNKNOWN_SUBJECT = "unknown";
     public static final Set<String> SINGULAR_SUBJECTS = Set.of("user", "spouse");
+    public static final String ISO_DATE_REGEX = "\\b\\d{4}-\\d{2}-\\d{2}\\b";
     public static final String USER_ID_PARAM = "userId";
     public static final String USER_NAME_PARAM = "userName";
     public static final String TIME_ZONE_PARAM = "timeZone";
@@ -34,6 +35,7 @@ public enum Constants {
 
     public static final String BEDROCK_CHAT_MODEL_ID = System.getenv("BEDROCK_CHAT_MODEL_ID");
     public static final String BEDROCK_CHAT_MAX_TOKENS = System.getenv("BEDROCK_CHAT_MAX_TOKENS");
+    public static final String BEDROCK_COMPRESSION_MODEL_ID = System.getenv("BEDROCK_COMPRESSION_MODEL_ID");
 
     public static final String BEDROCK_RERANK_MODEL_ID =
             (System.getenv("BEDROCK_RERANK_MODEL_ID") == null ||

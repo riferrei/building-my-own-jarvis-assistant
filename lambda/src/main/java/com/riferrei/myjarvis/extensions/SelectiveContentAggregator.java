@@ -17,24 +17,35 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.regex.MatchResult;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
-public class RelevanceContentAggregator implements ContentAggregator {
+public class SelectiveContentAggregator implements ContentAggregator {
 
-    private static final Logger logger = LoggerFactory.getLogger(RelevanceContentAggregator.class);
+    private static final Logger logger = LoggerFactory.getLogger(SelectiveContentAggregator.class);
 
     private final ScoringModel scoringModel;
     private final double minScore;
+    private final double fallbackRatio;
+    private final double fallbackMinScore;
     private final List<String> groupKeys;
+    private final Pattern keepPattern;
 
     private record ScoredContent(Content content, double score) {
     }
 
-    private RelevanceContentAggregator(ScoringModel scoringModel, double minScore, List<String> groupKeys) {
+    private SelectiveContentAggregator(ScoringModel scoringModel, double minScore, double fallbackRatio,
+                                       double fallbackMinScore, List<String> groupKeys, Pattern keepPattern) {
         this.scoringModel = scoringModel;
         this.minScore = minScore;
+        this.fallbackRatio = fallbackRatio;
+        this.fallbackMinScore = fallbackMinScore;
         this.groupKeys = groupKeys;
+        this.keepPattern = keepPattern;
     }
 
     @Override
@@ -60,20 +71,39 @@ public class RelevanceContentAggregator implements ContentAggregator {
                 .sorted(Comparator.comparingDouble(ScoredContent::score).reversed())
                 .toList();
 
-        var relevant = ranked.stream().filter(scored -> scored.score() >= minScore).toList();
+        var queryMatches = matchesOf(entry.getKey().text());
+        var relevant = ranked.stream()
+                .filter(scored -> scored.score() >= minScore || sharesMatch(scored, queryMatches))
+                .toList();
         if (relevant.isEmpty()) {
-            logger.debug("No content scored at or above {}; keeping top content scored {}",
-                    minScore, ranked.getFirst().score());
-            relevant = List.of(ranked.getFirst());
+            double floor = Math.max(ranked.getFirst().score() * fallbackRatio, fallbackMinScore);
+            relevant = Stream.concat(Stream.of(ranked.getFirst()),
+                            ranked.stream().skip(1).filter(scored -> scored.score() >= floor))
+                    .toList();
+            logger.debug("No content scored at or above {}; keeping {} contents scored at or above {}",
+                    minScore, relevant.size(), floor);
         } else {
-            logger.debug("Kept {} of {} contents scored at or above {}", relevant.size(), ranked.size(), minScore);
+            logger.debug("Kept {} of {} contents scored at or above {} or matching {}",
+                    relevant.size(), ranked.size(), minScore, queryMatches);
         }
 
         var grouped = withSameGroup(relevant, ranked);
         if (grouped.size() > relevant.size()) {
             logger.debug("Added {} contents sharing {} with the kept ones", grouped.size() - relevant.size(), groupKeys);
         }
-        return grouped.stream().map(RelevanceContentAggregator::withScore).toList();
+        return grouped.stream().map(SelectiveContentAggregator::withScore).toList();
+    }
+
+    private Set<String> matchesOf(String text) {
+        if (keepPattern == null) {
+            return Set.of();
+        }
+        return keepPattern.matcher(text).results().map(MatchResult::group).collect(Collectors.toSet());
+    }
+
+    private boolean sharesMatch(ScoredContent scored, Set<String> queryMatches) {
+        return !queryMatches.isEmpty()
+                && matchesOf(scored.content().textSegment().text()).stream().anyMatch(queryMatches::contains);
     }
 
     private List<ScoredContent> withSameGroup(List<ScoredContent> kept, List<ScoredContent> ranked) {
@@ -105,7 +135,10 @@ public class RelevanceContentAggregator implements ContentAggregator {
     public static class Builder {
         private ScoringModel scoringModel;
         private Double minScore;
+        private double fallbackRatio = 1.0;
+        private double fallbackMinScore = 0.0;
         private List<String> groupKeys = List.of();
+        private Pattern keepPattern;
 
         public Builder scoringModel(ScoringModel value) {
             this.scoringModel = value;
@@ -117,15 +150,30 @@ public class RelevanceContentAggregator implements ContentAggregator {
             return this;
         }
 
+        public Builder fallbackRatio(double value) {
+            this.fallbackRatio = value;
+            return this;
+        }
+
+        public Builder fallbackMinScore(double value) {
+            this.fallbackMinScore = value;
+            return this;
+        }
+
         public Builder groupBy(String... keys) {
             this.groupKeys = List.of(keys);
             return this;
         }
 
-        public RelevanceContentAggregator build() {
+        public Builder keepMatching(String value) {
+            this.keepPattern = Pattern.compile(value);
+            return this;
+        }
+
+        public SelectiveContentAggregator build() {
             Objects.requireNonNull(scoringModel, "scoringModel is required");
             Objects.requireNonNull(minScore, "minScore is required");
-            return new RelevanceContentAggregator(scoringModel, minScore, groupKeys);
+            return new SelectiveContentAggregator(scoringModel, minScore, fallbackRatio, fallbackMinScore, groupKeys, keepPattern);
         }
     }
 }
