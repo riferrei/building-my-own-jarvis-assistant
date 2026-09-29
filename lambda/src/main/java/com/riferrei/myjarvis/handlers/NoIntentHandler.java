@@ -39,8 +39,8 @@ public class NoIntentHandler implements RequestHandler {
 
     @Override
     public boolean canHandle(HandlerInput handlerInput) {
-        return hasSession(handlerInput)
-                && handlerInput.matches(Predicates.intentName(AMAZON_NO_INTENT))
+        return handlerInput.matches(Predicates.intentName(AMAZON_NO_INTENT))
+                && hasSession(handlerInput)
                 && isWaitingForReminderConfirmation(handlerInput);
     }
 
