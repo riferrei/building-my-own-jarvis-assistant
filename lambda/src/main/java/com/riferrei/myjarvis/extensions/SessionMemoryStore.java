@@ -13,7 +13,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -34,16 +33,22 @@ public class SessionMemoryStore implements ChatMemoryStore {
     private static final String EVENT_ID_FORMAT = "%019d#%s";
     private static final int BATCH_WRITE_MAX = 25;
 
-    private DynamoDbClient dynamoDbClient;
-    private String tableName;
-    private int ttlMinutes;
-    private boolean storeSystemMessages = false;
-    private boolean storeAiMessages = false;
-    private boolean storeToolMessages = false;
+    private final DynamoDbClient dynamoDbClient;
+    private final String tableName;
+    private final int ttlMinutes;
+    private final boolean storeAiMessages;
 
     private int lastFetchedCount = 0;
 
     private record SessionEvent(String role, String text) {
+    }
+
+    private SessionMemoryStore(DynamoDbClient dynamoDbClient, String tableName,
+                               int ttlMinutes, boolean storeAiMessages) {
+        this.dynamoDbClient = dynamoDbClient;
+        this.tableName = tableName;
+        this.ttlMinutes = ttlMinutes;
+        this.storeAiMessages = storeAiMessages;
     }
 
     @Override
@@ -57,14 +62,11 @@ public class SessionMemoryStore implements ChatMemoryStore {
 
             if (text == null || text.isBlank()) continue;
 
-            if (!storeSystemMessages && "SYSTEM".equalsIgnoreCase(role)) continue;
             if (!storeAiMessages && "ASSISTANT".equalsIgnoreCase(role)) continue;
-            if (!storeToolMessages && "TOOL".equalsIgnoreCase(role)) continue;
 
             ChatMessage chatMessage = switch (role.toUpperCase()) {
                 case "USER" -> UserMessage.from(text);
                 case "ASSISTANT" -> AiMessage.from(text);
-                case "SYSTEM" -> SystemMessage.from(text);
                 default -> {
                     logger.warn("Unknown message role: {}", role);
                     yield null;
@@ -89,14 +91,11 @@ public class SessionMemoryStore implements ChatMemoryStore {
                 : List.<ChatMessage>of();
 
         for (var message : newMessages) {
-            if (!storeSystemMessages && message instanceof SystemMessage) continue;
             if (!storeAiMessages && message instanceof AiMessage) continue;
-            if (!storeToolMessages && message instanceof ToolExecutionResultMessage) continue;
 
             String role = switch (message) {
                 case UserMessage ignored -> "USER";
                 case AiMessage ignored -> "ASSISTANT";
-                case SystemMessage ignored -> "SYSTEM";
                 default -> null;
             };
 
@@ -233,15 +232,6 @@ public class SessionMemoryStore implements ChatMemoryStore {
         }
     }
 
-    public boolean isStoreSystemMessages() { return storeSystemMessages; }
-    public void setStoreSystemMessages(boolean v) { this.storeSystemMessages = v; }
-
-    public boolean isStoreAiMessages() { return storeAiMessages; }
-    public void setStoreAiMessages(boolean v) { this.storeAiMessages = v; }
-
-    public boolean isStoreToolMessages() { return storeToolMessages; }
-    public void setStoreToolMessages(boolean v) { this.storeToolMessages = v; }
-
     public static Builder builder() {
         return new Builder();
     }
@@ -250,9 +240,7 @@ public class SessionMemoryStore implements ChatMemoryStore {
         private DynamoDbClient dynamoDbClient;
         private String tableName;
         private Integer ttlMinutes;
-        private Optional<Boolean> storeSystemMessages = Optional.empty();
-        private Optional<Boolean> storeAiMessages = Optional.empty();
-        private Optional<Boolean> storeToolMessages = Optional.empty();
+        private boolean storeAiMessages = false;
 
         public Builder dynamoDbClient(DynamoDbClient value) {
             this.dynamoDbClient = value;
@@ -269,18 +257,8 @@ public class SessionMemoryStore implements ChatMemoryStore {
             return this;
         }
 
-        public Builder storeSystemMessages(boolean value) {
-            this.storeSystemMessages = Optional.of(value);
-            return this;
-        }
-
         public Builder storeAiMessages(boolean value) {
-            this.storeAiMessages = Optional.of(value);
-            return this;
-        }
-
-        public Builder storeToolMessages(boolean value) {
-            this.storeToolMessages = Optional.of(value);
+            this.storeAiMessages = value;
             return this;
         }
 
@@ -288,14 +266,7 @@ public class SessionMemoryStore implements ChatMemoryStore {
             Objects.requireNonNull(dynamoDbClient, "dynamoDbClient is required");
             Objects.requireNonNull(tableName, "tableName is required");
             Objects.requireNonNull(ttlMinutes, "ttlMinutes is required");
-            var store = new SessionMemoryStore();
-            store.dynamoDbClient = this.dynamoDbClient;
-            store.tableName = this.tableName;
-            store.ttlMinutes = this.ttlMinutes;
-            storeSystemMessages.ifPresent(store::setStoreSystemMessages);
-            storeAiMessages.ifPresent(store::setStoreAiMessages);
-            storeToolMessages.ifPresent(store::setStoreToolMessages);
-            return store;
+            return new SessionMemoryStore(dynamoDbClient, tableName, ttlMinutes, storeAiMessages);
         }
     }
 }

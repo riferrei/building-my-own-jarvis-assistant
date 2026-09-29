@@ -3,7 +3,6 @@ package com.riferrei.myjarvis.extensions;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.scoring.ScoringModel;
 import dev.langchain4j.rag.content.Content;
-import dev.langchain4j.rag.content.ContentMetadata;
 import dev.langchain4j.rag.content.aggregator.ContentAggregator;
 import dev.langchain4j.rag.content.aggregator.ReciprocalRankFuser;
 import dev.langchain4j.rag.query.Query;
@@ -12,7 +11,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -91,7 +89,7 @@ public class SelectiveContentAggregator implements ContentAggregator {
         if (grouped.size() > relevant.size()) {
             logger.debug("Added {} contents sharing {} with the kept ones", grouped.size() - relevant.size(), groupKeys);
         }
-        return grouped.stream().map(SelectiveContentAggregator::withScore).toList();
+        return grouped.stream().map(ScoredContent::content).toList();
     }
 
     private Set<String> matchesOf(String text) {
@@ -120,12 +118,6 @@ public class SelectiveContentAggregator implements ContentAggregator {
         var metadata = scored.content().textSegment().metadata();
         var values = groupKeys.stream().map(metadata::getString).toList();
         return values.contains(null) ? Optional.empty() : Optional.of(values);
-    }
-
-    private static Content withScore(ScoredContent scored) {
-        Map<ContentMetadata, Object> metadata = new LinkedHashMap<>(scored.content().metadata());
-        metadata.put(ContentMetadata.RERANKED_SCORE, scored.score());
-        return Content.from(scored.content().textSegment(), metadata);
     }
 
     public static Builder builder() {

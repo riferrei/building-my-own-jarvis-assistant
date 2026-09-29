@@ -8,6 +8,7 @@ import com.riferrei.myjarvis.helpers.HandlerHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.Optional;
 
 import static com.riferrei.myjarvis.helpers.Constants.*;
@@ -26,7 +27,15 @@ public class NoIntentHandler implements RequestHandler {
 
     private static final String DEFAULT_RESPONSE = "Understood. No reminder will be set.";
     private static final String SESSION_KEY_WAITING = "waitingForReminderConfirmation";
-    private static final String SESSION_KEY_REMINDER = "reminderText";
+    private static final String SESSION_KEY_REMINDER = "reminderTopic";
+    private static final List<String> SESSION_KEYS = List.of(
+            SESSION_KEY_WAITING,
+            SESSION_KEY_REMINDER,
+            "reminderSchedule",
+            "reminderIsRecurring",
+            "reminderFrequency",
+            "reminderByDays"
+    );
 
     @Override
     public boolean canHandle(HandlerInput handlerInput) {
@@ -77,8 +86,7 @@ public class NoIntentHandler implements RequestHandler {
                 logger.debug("Clearing declined reminder: {}", reminderText);
             }
 
-            sessionAttributes.remove(SESSION_KEY_WAITING);
-            sessionAttributes.remove(SESSION_KEY_REMINDER);
+            SESSION_KEYS.forEach(sessionAttributes::remove);
             handlerInput.getAttributesManager().setSessionAttributes(sessionAttributes);
 
             logger.debug("Reminder session data cleared");

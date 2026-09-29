@@ -1,7 +1,6 @@
 package com.riferrei.myjarvis.services;
 
 import dev.langchain4j.data.segment.TextSegment;
-import dev.langchain4j.invocation.InvocationParameters;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.embedding.EmbeddingModel;
@@ -55,7 +54,6 @@ public class ChatAssistantService {
 
             Answer with the rewritten query only, with nothing before or after it.""");
 
-    private final List<Object> tools;
     private final ChatModel chatModel;
     private final ChatModel compressionModel;
     private final ScoringModel scoringModel;
@@ -70,8 +68,7 @@ public class ChatAssistantService {
                                 DynamoDbClient dynamoDbClient,
                                 EmbeddingModel embeddingModel,
                                 EmbeddingStore<TextSegment> knowledgeBaseStore,
-                                EmbeddingStore<TextSegment> userMemoryStore,
-                                List<Object> tools) {
+                                EmbeddingStore<TextSegment> userMemoryStore) {
         this.chatModel = chatModel;
         this.compressionModel = compressionModel;
         this.scoringModel = scoringModel;
@@ -79,7 +76,6 @@ public class ChatAssistantService {
         this.embeddingModel = embeddingModel;
         this.knowledgeBaseStore = knowledgeBaseStore;
         this.userMemoryStore = userMemoryStore;
-        this.tools = tools;
     }
 
     public String processQueryWithoutContext(String systemPrompt, String query) {
@@ -90,7 +86,7 @@ public class ChatAssistantService {
                         .chatModel(chatModel)
                         .build();
 
-        return basicChatAssistant.chat(systemPrompt, query, new InvocationParameters());
+        return basicChatAssistant.chat(systemPrompt, query);
     }
 
     public String processQueryWithContext(String systemPrompt,
@@ -109,19 +105,11 @@ public class ChatAssistantService {
                         .chatMemory(getChatMemory(userId))
                         .retrievalAugmentor(retrievalAugmentor)
                         .storeRetrievedContentInChatMemory(false)
-                        .tools(tools)
                         .build();
 
-        String answer = contextualChatAssistant.chat(systemPrompt, userId, userName, query, toolParameters(userId, timeZone));
+        String answer = contextualChatAssistant.chat(systemPrompt, userName, query);
         logger.info("Processed query with context in {} ms", elapsedMillis(start));
         return answer;
-    }
-
-    private InvocationParameters toolParameters(String userId, String timeZone) {
-        var invocationParameters = new InvocationParameters();
-        invocationParameters.put(USER_ID_PARAM, userId);
-        invocationParameters.put(TIME_ZONE_PARAM, timeZone);
-        return invocationParameters;
     }
 
     private RetrievalAugmentor createRetrievalAugmentor(String userId, String timeZone) {

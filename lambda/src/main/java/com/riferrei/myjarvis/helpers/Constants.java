@@ -29,7 +29,6 @@ public enum Constants {
     public static final String ISO_DATE_REGEX = "\\b\\d{4}-\\d{2}-\\d{2}\\b";
     public static final String USER_ID_PARAM = "userId";
     public static final String USER_NAME_PARAM = "userName";
-    public static final String TIME_ZONE_PARAM = "timeZone";
     public static final String MEMORY_PARAM = "memory";
     public static final String QUERY_PARAM = "query";
 

@@ -3,7 +3,6 @@ package com.riferrei.myjarvis.services;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.riferrei.myjarvis.helpers.StoredMemory;
 import dev.langchain4j.data.segment.TextSegment;
-import dev.langchain4j.invocation.InvocationParameters;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.store.embedding.EmbeddingMatch;
 import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
@@ -160,7 +159,7 @@ public class DeDuplicationService {
 
     private Optional<StoredMemory> judge(StoredMemory memory, List<StoredMemory> candidates) {
         var systemPrompt = memory.keyed() ? ATTRIBUTE_PROMPT : TEXT_PROMPT;
-        var answer = memoryJudge.chat(systemPrompt, describe(memory, candidates), new InvocationParameters());
+        var answer = memoryJudge.chat(systemPrompt, describe(memory, candidates));
         logger.info("Judged memory {} against {} candidates: {}", memory.id(), candidates.size(), answer);
         return parseReplaces(answer)
                 .filter(number -> number >= 1 && number <= candidates.size())

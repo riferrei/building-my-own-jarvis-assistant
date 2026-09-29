@@ -1,6 +1,5 @@
 package com.riferrei.myjarvis.services;
 
-import dev.langchain4j.invocation.InvocationParameters;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
 import dev.langchain4j.service.V;
@@ -12,10 +11,8 @@ public interface ContextualChatAssistant {
         
         The name of the user is {{userName}}.
         """)
-    @UserMessage("Query: {{query}}")
+    @UserMessage("{{query}}")
     String chat(@V("systemPrompt") String systemPrompt,
-                @V("userId") String userId,
                 @V("userName") String userName,
-                @V("query") String query,
-                InvocationParameters invocationParameters);
+                @V("query") String query);
 }

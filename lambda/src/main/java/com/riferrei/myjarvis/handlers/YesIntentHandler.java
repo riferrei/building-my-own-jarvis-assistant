@@ -131,7 +131,7 @@ public class YesIntentHandler implements RequestHandler {
         try {
             return reminderMgmtService.getReminders() != null;
         } catch (ServiceException se) {
-            return se.getStatusCode() == 401 || se.getStatusCode() == 403;
+            return se.getStatusCode() != 401 && se.getStatusCode() != 403;
         } catch (Exception ex) {
             return false;
         }

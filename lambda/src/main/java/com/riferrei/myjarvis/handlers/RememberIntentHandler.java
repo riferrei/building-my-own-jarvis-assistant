@@ -87,16 +87,22 @@ public class RememberIntentHandler implements RequestHandler {
         should not contain details about the schedule or recurrence.
 
         ANSWER: The answer is spoken aloud, so write dates the way they're said, such as
-        "Wednesday, September 30th", never like "2026-09-30". Never promise, offer, or ask
-        about a reminder in the answer: when suggest_reminder=true, a question asking the
-        user whether to set one up is added after your answer.
+        "Wednesday, September 30th", never like "2026-09-30". The answer only confirms what
+        you noted: never say you will remind or alert the user, and never offer or ask about
+        a reminder. A reminder is an alert this device plays at the scheduled time, and when
+        suggest_reminder=true, a question asking the user whether to set one up on this
+        device is added after your answer.
 
         MEMORY: Write the memory as a concise statement about the user, starting with "User",
-        such as "User's new couch will arrive on Thursday, 2026-10-01." Always use absolute
+        such as "User's new couch will arrive on Thursday, 2026-10-01." When it's unclear who
+        the memory is about, don't write it as a fact about the user, and don't use a pronoun
+        like "her" or "his" that could be read as the user: describe the person as unnamed,
+        such as "User mentioned an unnamed woman whose birthday is March 3." Always use absolute
         dates (YYYY-MM-DD), never relative ones like "tomorrow" or "next Thursday", because the
-        memory will be read on later days. When the date is one of the next seven days, write
-        its weekday from the list above before it, like "Thursday, 2026-10-01", and leave the
-        weekday out for any other date. When the user gives a date without a year, such
+        memory will be read on later days. A time-bound memory always names its date, even
+        when it's today, such as "User has a call at 3 PM on 2026-09-29." When the date is one
+        of the next seven days, write its weekday from the list above before it, like
+        "Thursday, 2026-10-01", and leave the weekday out for any other date. When the user gives a date without a year, such
         as a birthday on May 3rd, write it without a year, like "May 3", and never invent
         one. Write times the way they're spoken, like "2 PM" or
         "6:57 PM", never as timestamps like "2026-09-27T18:57:27".
@@ -162,7 +168,7 @@ public class RememberIntentHandler implements RequestHandler {
         [Example 2]
         User: "Remember to take vitamins every morning at 8 AM"
         Response: {
-            "answer": "I've recorded your daily vitamin reminder for 8 AM.",
+            "answer": "I've noted that you take your vitamins every morning at 8 AM.",
             "memory": "User takes vitamins every morning at 8 AM.",
             "subject": "user",
             "attribute": "vitamins",
@@ -281,7 +287,7 @@ public class RememberIntentHandler implements RequestHandler {
             attributes.put("reminderByDays", aiResponse.byDays());
             handlerInput.getAttributesManager().setSessionAttributes(attributes);
 
-            var promptText = speechText + " Would you like me to set up a reminder for this?";
+            var promptText = speechText + " Would you like a reminder on this device, so it alerts you at that time?";
             return HandlerHelper.buildAlexaResponse(handlerInput, promptText, false);
         }
 

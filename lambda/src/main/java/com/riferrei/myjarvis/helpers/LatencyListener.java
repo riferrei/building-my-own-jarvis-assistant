@@ -1,6 +1,5 @@
 package com.riferrei.myjarvis.helpers;
 
-import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.model.chat.listener.ChatModelErrorContext;
 import dev.langchain4j.model.chat.listener.ChatModelListener;
 import dev.langchain4j.model.chat.listener.ChatModelRequestContext;
@@ -8,7 +7,6 @@ import dev.langchain4j.model.chat.listener.ChatModelResponseContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -27,16 +25,11 @@ public class LatencyListener implements ChatModelListener {
     public void onResponse(ChatModelResponseContext responseContext) {
         var chatResponse = responseContext.chatResponse();
         var tokenUsage = chatResponse.tokenUsage();
-        var aiMessage = chatResponse.aiMessage();
-        var requestedTools = aiMessage == null || !aiMessage.hasToolExecutionRequests()
-                ? List.<String>of()
-                : aiMessage.toolExecutionRequests().stream().map(ToolExecutionRequest::name).toList();
-        logger.info("Chat model call took {} ms (input tokens: {}, output tokens: {}, finish reason: {}, requested tools: {})",
+        logger.info("Chat model call took {} ms (input tokens: {}, output tokens: {}, finish reason: {})",
                 elapsedMillis(responseContext.attributes()),
                 tokenUsage == null ? null : tokenUsage.inputTokenCount(),
                 tokenUsage == null ? null : tokenUsage.outputTokenCount(),
-                chatResponse.finishReason(),
-                requestedTools);
+                chatResponse.finishReason());
     }
 
     @Override

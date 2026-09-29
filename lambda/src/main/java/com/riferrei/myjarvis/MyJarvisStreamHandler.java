@@ -28,7 +28,6 @@ import com.riferrei.myjarvis.handlers.*;
 import com.riferrei.myjarvis.helpers.UserDoesNotExistExceptionHandler;
 import com.riferrei.myjarvis.helpers.UserValidationInterceptor;
 import com.riferrei.myjarvis.services.*;
-import com.riferrei.myjarvis.tools.DateTimeTool;
 
 import java.util.List;
 import java.util.Map;
@@ -113,8 +112,7 @@ public class MyJarvisStreamHandler extends SkillStreamHandler {
     private static final ChatAssistantService chatAssistantService =
             new ChatAssistantService(
                     chatModel, compressionModel, scoringModel, dynamoDbClient,
-                    embeddingModel, knowledgeBaseStore, userMemoryStore,
-                    List.of(new DateTimeTool())
+                    embeddingModel, knowledgeBaseStore, userMemoryStore
             );
 
     public MyJarvisStreamHandler() {

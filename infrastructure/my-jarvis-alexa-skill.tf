@@ -425,7 +425,7 @@ resource "aws_lambda_function" "my_jarvis_alexa_skill_handler" {
   role             = aws_iam_role.my_jarvis_alexa_skill_handler_role.arn
   runtime          = "java21"
   architectures    = ["arm64"]
-  memory_size      = 2048
+  memory_size      = 1024
   timeout          = 60
   environment {
     variables = {
