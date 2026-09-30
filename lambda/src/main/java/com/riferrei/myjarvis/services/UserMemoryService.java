@@ -73,11 +73,8 @@ public class UserMemoryService {
     }
 
     private String memoryId(String userId, String subject, Optional<String> attribute, Optional<String> value) {
-        if (attribute.isEmpty()) {
-            return UUID.randomUUID().toString();
-        }
-        return Stream.concat(Stream.of(userId, subject, attribute.get()), value.stream())
-                .collect(Collectors.joining("#"));
+        return attribute.map(s -> Stream.concat(Stream.of(userId, subject, s), value.stream())
+                .collect(Collectors.joining("#"))).orElseGet(() -> UUID.randomUUID().toString());
     }
 
     private boolean isKeyable(String subject) {

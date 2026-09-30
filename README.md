@@ -73,6 +73,7 @@ This project demonstrates how to create a [J.A.R.V.I.S](https://en.wikipedia.org
 | `session_memory_max_messages`  | Most recent session-memory messages replayed to the chat model per request. Optional; defaults to `20`. |
 | `dynamodb_user_memory_table_name` | DynamoDB *vector* table storing every user's long-term memories (shared, isolated by ownerId). |
 | `dynamodb_user_memory_index_name` | Vector index within the user-memory table. Optional; defaults to `user-memories`.  |
+| `log_retention_days`           | Days CloudWatch Logs keeps the logs of both Lambda functions. Optional; defaults to `14`. |
 
 #### DynamoDB Setup
 No manual steps are required. Terraform provisions the plain **users** and **session-memory** tables, and creates the long-term user-memory **vector** table by running the AWS CLI (the AWS provider has no resource for a DynamoDB vector table), so the AWS CLI must be installed and use the same credentials as Terraform. Set the table names via the `dynamodb_*_table_name` variables in your `terraform.tfvars`.

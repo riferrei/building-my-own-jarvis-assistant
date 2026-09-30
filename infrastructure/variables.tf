@@ -114,6 +114,12 @@ variable "session_memory_max_messages" {
   default     = 20
 }
 
+variable "log_retention_days" {
+  description = "Days CloudWatch Logs keeps the logs of both Lambda functions"
+  type        = number
+  default     = 14
+}
+
 variable "create_knowledge_base_bucket" {
   description = "Whether to create a new knowledge base bucket or use an existing one"
   type        = bool

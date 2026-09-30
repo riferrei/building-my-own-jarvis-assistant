@@ -21,4 +21,6 @@ dynamodb_session_memory_table_name = "my-jarvis-session-memory"
 session_memory_ttl_minutes         = 5
 session_memory_max_messages        = 20
 
+log_retention_days = 14
+
 alexa_skill_id = "your-alexa-skill-id"

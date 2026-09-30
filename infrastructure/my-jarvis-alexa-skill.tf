@@ -406,6 +406,11 @@ resource "aws_iam_role_policy" "my_jarvis_alexa_skill_handler_role_policy" {
   })
 }
 
+resource "aws_cloudwatch_log_group" "my_jarvis_alexa_skill_handler" {
+  name              = "/aws/lambda/${var.application_prefix}-alexa-skill-handler"
+  retention_in_days = var.log_retention_days
+}
+
 resource "aws_lambda_function" "my_jarvis_alexa_skill_handler" {
   depends_on = [
     null_resource.my_jarvis_alexa_skill_handler_build,
@@ -427,6 +432,10 @@ resource "aws_lambda_function" "my_jarvis_alexa_skill_handler" {
   architectures    = ["arm64"]
   memory_size      = 1024
   timeout          = 60
+  logging_config {
+    log_format = "Text"
+    log_group  = aws_cloudwatch_log_group.my_jarvis_alexa_skill_handler.name
+  }
   environment {
     variables = {
       BEDROCK_CHAT_MODEL_ID        = var.bedrock_chat_model_id
@@ -543,6 +552,11 @@ resource "aws_iam_role_policy" "my_jarvis_memory_dedup_role_policy" {
   })
 }
 
+resource "aws_cloudwatch_log_group" "my_jarvis_memory_dedup_handler" {
+  name              = "/aws/lambda/${var.application_prefix}-memory-dedup-handler"
+  retention_in_days = var.log_retention_days
+}
+
 resource "aws_lambda_function" "my_jarvis_memory_dedup_handler" {
   depends_on = [
     aws_iam_role_policy.my_jarvis_memory_dedup_role_policy,
@@ -559,6 +573,10 @@ resource "aws_lambda_function" "my_jarvis_memory_dedup_handler" {
   architectures    = ["arm64"]
   memory_size      = 512
   timeout          = 120
+  logging_config {
+    log_format = "Text"
+    log_group  = aws_cloudwatch_log_group.my_jarvis_memory_dedup_handler.name
+  }
   environment {
     variables = {
       BEDROCK_CHAT_MODEL_ID           = var.bedrock_chat_model_id
