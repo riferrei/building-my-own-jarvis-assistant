@@ -58,6 +58,7 @@ This project demonstrates how to create a [J.A.R.V.I.S](https://en.wikipedia.org
 | `application_prefix`           | Prefix used for naming AWS resources (Lambda function, IAM role, artifacts bucket, etc.). |
 | `bedrock_chat_model_id`        | Amazon Bedrock global inference profile for the chat model. Optional; defaults to `global.anthropic.claude-sonnet-5`. |
 | `bedrock_chat_max_tokens`      | Maximum output tokens for the chat model. Optional; defaults to `4096`.                |
+| `bedrock_compression_model_id` | Amazon Bedrock global inference profile for the model that rewrites follow-up questions into standalone queries before retrieval. Optional; defaults to `global.anthropic.claude-haiku-4-5-20251001-v1:0`. |
 | `bedrock_rerank_model_id`      | Amazon Bedrock re-ranking model that re-ranks retrieved memories and knowledge-base content. Optional; defaults to `cohere.rerank-v3-5:0`. See [Re-ranking Model](#re-ranking-model). |
 | `bedrock_rerank_region`        | AWS Region where the re-ranking model is invoked. Optional; defaults to the Region the Lambda is deployed to. See [Re-ranking Model](#re-ranking-model). |
 | `knowledge_base_bucket_name`   | Name of the S3 bucket used to upload knowledge base documents.                         |
@@ -80,7 +81,7 @@ No manual steps are required. Terraform provisions the plain **users** and **ses
 Terraform provisions the S3 Vectors bucket and index. To add documents to the knowledge base, upload PDF files to the `ingest/` folder of the knowledge base bucket. An EventBridge rule invokes the Lambda every minute to embed new files into S3 Vectors, then moves each file to `processed/` on success or `failed/` on error.
 
 #### Amazon Bedrock Model Access
-The assistant calls three models on Amazon Bedrock: Claude Sonnet 5 for chat, Amazon Titan Text Embeddings V2 for embeddings, and Cohere Rerank 3.5 for re-ranking. Amazon models are available without any setup. Anthropic and Cohere models are sold through AWS Marketplace, so each one must be enabled once per AWS account before the Lambda can call it. Do this before your first request to the skill.
+The assistant calls four models on Amazon Bedrock: Claude Sonnet 5 for chat, Claude Haiku 4.5 for query compression, Amazon Titan Text Embeddings V2 for embeddings, and Cohere Rerank 3.5 for re-ranking. Amazon models are available without any setup. Anthropic and Cohere models are sold through AWS Marketplace, so each one must be enabled once per AWS account before the Lambda can call it. Do this before your first request to the skill.
 
 Amazon Bedrock enables a Marketplace model automatically the first time it is called, but only when the caller has the `aws-marketplace:Subscribe`, `aws-marketplace:Unsubscribe`, and `aws-marketplace:ViewSubscriptions` permissions. The Lambda's IAM role deliberately does not have them, so until a model is enabled, the Lambda's calls to it fail with a "Model access is denied" error that mentions these actions. Once a model is enabled, calling it needs no Marketplace permissions.
 
@@ -90,11 +91,12 @@ Before you start, make sure you have:
 - A valid payment method on the AWS account for AWS Marketplace purchases.
 - If the account belongs to an AWS Organization, service control policies that allow AWS Marketplace subscriptions and use of these models. Otherwise, ask your administrator to enable them.
 
-Enable each model with the values below. If you change `bedrock_chat_model_id`, use its foundation model ID, without the `global.` inference profile prefix. If you switch the re-ranking model to an Amazon model, skip it.
+Enable each model with the values below. If you change `bedrock_chat_model_id` or `bedrock_compression_model_id`, use its foundation model ID, without the `global.` inference profile prefix. If you switch the re-ranking model to an Amazon model, skip it.
 
 | Model             | `MODEL_ID`                  | `REGION`                                                        |
 |:------------------|:----------------------------|:----------------------------------------------------------------|
 | Claude Sonnet 5   | `anthropic.claude-sonnet-5` | The Region you deploy to                                        |
+| Claude Haiku 4.5  | `anthropic.claude-haiku-4-5-20251001-v1:0` | The Region you deploy to                         |
 | Cohere Rerank 3.5 | `cohere.rerank-v3-5:0`      | `bedrock_rerank_region`, or the Region you deploy to if it is empty |
 
 1. **Submit Anthropic's first-time use form (Claude only).** Anthropic requires use case details once per account, or once in the organization's management account, whose submission member accounts inherit. Opt-in Regions require it again. Open any Anthropic model in the model catalog of the Amazon Bedrock console and submit the form when prompted. Access is granted as soon as the form is submitted.
@@ -129,7 +131,7 @@ Re-ranking goes through the Amazon Bedrock Rerank API, which works with any re-r
 
 If the model you choose is not available in the Region you deploy to, set `bedrock_rerank_region` to the nearest Region that offers it, for example `eu-central-1` when deploying to `eu-west-1`. The Lambda then calls the re-ranking model in that Region while every other resource stays in the Region you deploy to. Each re-ranking call then crosses Regions, which adds latency to every request that retrieves memories or knowledge-base content, and the query and retrieved content are processed in that Region. Check the [supported Regions](https://docs.aws.amazon.com/bedrock/latest/userguide/models-regions.html) before deploying, as the list may change.
 
-Each re-ranking model scores relevance on its own scale. The assistant keeps only content scored at or above a minimum score (`minScore` in `ChatAssistantService`), so retune it after switching models.
+Each re-ranking model scores relevance on its own scale. The assistant keeps content scored at or above a minimum score (`minScore` in `ChatAssistantService`). When nothing reaches it, the assistant keeps the top result plus any result scored close to it (`fallbackRatio` and `fallbackMinScore`). Retune these values after switching models.
 
 #### Installation & Deployment
 Once configured, deploy everything using:
@@ -210,7 +212,7 @@ On the next request, the assistant creates your user record again from your Alex
 This architecture uses an Alexa skill written in Java and hosted as an AWS Lambda function. The Lambda implements a stream handler that processes user requests and responses, using DynamoDB (plain tables for user records and short-term session memory, plus a vector table for long-term user memories) as its backend layer. A second Lambda function, triggered by the vector table's DynamoDB stream, removes long-term memories that a newer memory replaces.
 
 ![Chat Assistant Service](./assets/chat-assistant-service.png)
-As part of the stream handler implementation, it uses a Chat Assistant Service that leverages LangChain4J to manage interactions with the memory stores. This service implements context engineering, ensuring that conversations are enriched with relevant user memories retrieved from DynamoDB and knowledge-base content retrieved from S3 Vectors, re-ranked through the Amazon Bedrock Rerank API (Cohere Rerank 3.5 by default) so only the relevant results reach the prompt. Claude Sonnet 5 on Amazon Bedrock is the LLM used to process and generate responses, and Amazon Titan Text Embeddings V2 on Amazon Bedrock generates the embeddings for the knowledge base and user memories.
+As part of the stream handler implementation, it uses a Chat Assistant Service that leverages LangChain4J to manage interactions with the memory stores. This service implements context engineering, ensuring that conversations are enriched with relevant user memories retrieved from DynamoDB and knowledge-base content retrieved from S3 Vectors, re-ranked through the Amazon Bedrock Rerank API (Cohere Rerank 3.5 by default) so only the relevant results reach the prompt. Claude Sonnet 5 on Amazon Bedrock is the LLM used to process and generate responses, Claude Haiku 4.5 rewrites follow-up questions into standalone queries before retrieval, and Amazon Titan Text Embeddings V2 on Amazon Bedrock generates the embeddings for the knowledge base and user memories.
 
 ## Known Issues
 - Alexa Developer Console may require manual linking if credentials are not fully synchronized.
