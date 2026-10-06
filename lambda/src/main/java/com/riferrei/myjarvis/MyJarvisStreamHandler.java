@@ -92,6 +92,7 @@ public class MyJarvisStreamHandler extends SkillStreamHandler {
             .indexName(DYNAMODB_USER_MEMORY_INDEX_NAME)
             .distanceFunction(VectorDistanceFunction.COSINE)
             .inlineFilterAttributes(List.of(OWNER_ID_METADATA_KEY, SUBJECT_METADATA_KEY))
+            .ttlAttribute(EXPIRES_AT_METADATA_KEY)
             .createTableIfNotExists(false)
             .build();
 

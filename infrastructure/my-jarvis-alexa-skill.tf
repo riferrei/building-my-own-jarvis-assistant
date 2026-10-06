@@ -372,6 +372,7 @@ resource "aws_iam_role_policy" "my_jarvis_alexa_skill_handler_role_policy" {
         Effect = "Allow"
         Action = [
           "dynamodb:BatchWriteItem",
+          "dynamodb:DescribeTimeToLive",
           "dynamodb:Scan",
           "dynamodb:SearchVectors"
         ]

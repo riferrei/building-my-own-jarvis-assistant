@@ -29,7 +29,6 @@ import com.riferrei.myjarvis.extensions.SessionMemoryStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Instant;
 import java.util.concurrent.TimeUnit;
 
 import static com.riferrei.myjarvis.helpers.Constants.*;
@@ -122,7 +121,7 @@ public class ChatAssistantService {
         // memories and the general knowledge base. The contentAggregator will be
         // responsible for scoring and aggregating the relevant content.
         QueryRouter queryRouter = new DefaultQueryRouter(
-                timed("user memories", unexpired(getUserMemories(userId))),
+                timed("user memories", getUserMemories(userId)),
                 timed("knowledge base", getKnowledgeBase())
         );
 
@@ -208,24 +207,6 @@ public class ChatAssistantService {
             var contents = contentRetriever.retrieve(query);
             logger.info("Retrieved {} contents from {} in {} ms", contents.size(), source, elapsedMillis(start));
             return contents;
-        };
-    }
-
-    private static ContentRetriever unexpired(ContentRetriever contentRetriever) {
-        return query -> {
-            long now = Instant.now().getEpochSecond();
-            var contents = contentRetriever.retrieve(query);
-            var unexpiredContents = contents.stream()
-                    .filter(content -> {
-                        Long expiresAt = content.textSegment().metadata().getLong(EXPIRES_AT_METADATA_KEY);
-                        return expiresAt == null || expiresAt > now;
-                    })
-                    .toList();
-            if (unexpiredContents.size() < contents.size()) {
-                logger.info("Dropped {} expired contents from user memories",
-                        contents.size() - unexpiredContents.size());
-            }
-            return unexpiredContents;
         };
     }
 
